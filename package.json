@@ -1,0 +1,15 @@
+{
+  "name": "torn",
+  "version": "1.0.0",
+  "description": "a torrent application",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "crazysamurai",
+  "license": "ISC",
+  "dependencies": {
+    "bencode": "^4.0.0"
+  }
+}
