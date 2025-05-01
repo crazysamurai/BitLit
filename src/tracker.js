@@ -1,51 +1,71 @@
-import dgram from "node:dgram";
+import dgram from "node:dgram"; // for udp communication
 import crypto from "node:crypto";
 import * as torrentParser from "./torrent-parser.js";
 import { genId } from "./util.js";
 import { group } from "./groups.js";
 
 //protocol to get the list of peers
-export const getPeers = async (torrent, callback) => {
-  //const announce = Buffer.from(torrent.announce); //create a buffer because we need to convert it to human understandable string and currently it is not buffer type but Uint8Array type
 
+//remember to update the function to select the tracker with most peers
+export const getPeers = async (torrent, callback) => {
   const socket = dgram.createSocket("udp4");
 
-  let rawUrl = new URL(new Buffer.from(torrent["announce-list"][5][0]));
-  console.log(rawUrl);
-  // let rawUrl;
-  // for (let i = 0; i < torrent["announce-list"].length; i++) {
-  //   let buf = new Buffer.from(torrent["announce-list"][i][0]);
-  //   rawUrl = new URL(buf.toString("utf-8"));
-  //   console.log(buf.toString("utf-8"));
+  let rawUrl;
+  let listLength = 0; //length of announce-list
+  let flag = false; //flag to check if announce-list is present
 
-  //   // console.log("Tracker URL:", rawUrl.href);
+  if (torrent["announce-list"]) {
+    flag = true;
+    listLength = torrent["announce-list"].length;
+  } else {
+    listLength = 1;
+  }
 
-  //   udpSend(socket, buildConnReq(), rawUrl);
-  //   await new Promise((resolve) => setTimeout(resolve, Math.pow(2, i) * 15));
-  // }
+  for (let i = 0; i < listLength; i++) {
+    try {
+      if (flag) {
+        rawUrl = new URL(
+          new Buffer.from(torrent["announce-list"][i][0]).toString("utf-8")
+        );
+      } else {
+        rawUrl = new URL(new Buffer.from(torrent.announce).toString("utf-8"));
+      }
 
-  //1.send connect request
-  udpSend(socket, buildConnReq(), rawUrl);
+      const response = await new Promise((resolve, reject) => {
+        let timeout;
 
-  socket.on("message", (res) => {
-    console.log("Raw response from tracker:", res);
-    if (respType(res) === "connect") {
-      //since both the responses (connect and announce) come through the same socket, we need to distinguish
+        //listen for response from tracker
+        socket.on("message", (res) => {
+          console.log("response from tracker:", rawUrl.href);
+          clearTimeout(timeout); //clear timeout
+          resolve(res); //resolve with response
+        });
 
-      //2.receive and parse connect response
-      const connResp = parsedConnResp(res);
+        udpSend(socket, buildConnReq(), rawUrl); //send connection request to tracker
 
-      //3.send announce request
-      const announceReq = buildAnnounceReq(connResp.connectionId, torrent);
-      udpSend(socket, announceReq, rawUrl);
-    } else if (respType(res) === "announce") {
-      //4.parse announce response
-      const announceResp = parsedAnnounceResp(res);
+        timeout = setTimeout(() => {
+          reject(new Error("No response from tracker"));
+        }, 5000);
+      });
 
-      //5.pass peers to callback
-      callback(announceResp.peers);
+      if (respType(response) === "connect") {
+        const connResp = parsedConnResp(response);
+        const announceReq = buildAnnounceReq(connResp.connectionId, torrent);
+        udpSend(socket, announceReq, rawUrl);
+
+        socket.on("message", (res) => {
+          if (respType(res) === "announce") {
+            const announceResp = parsedAnnounceResp(res);
+            callback(announceResp.peers);
+          }
+        });
+      }
+      break;
+    } catch (err) {
+      console.error(err.message, rawUrl.href);
+      continue;
     }
-  });
+  }
 };
 
 function udpSend(socket, message, rawUrl, callback = () => {}) {
