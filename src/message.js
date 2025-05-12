@@ -1,5 +1,4 @@
 import { infoHash } from "./torrent-parser";
-import { torrent } from "../index.js";
 import { genId } from "./util.js";
 
 //https://wiki.theory.org/BitTorrentSpecification#Messages
@@ -175,6 +174,23 @@ const buildPort = (payload) => {
   return buf;
 };
 
+const parse = (msg) => {
+  // 6: request, structure: {index, begin, length}
+  // 7: piece, structure: {index, begin, block}
+  // 8: cancel, structure: {index, begin, length}
+
+  const id = msg.length > 4 ? msg.readInt8(4) : null; //message ID at index 4
+  let payload = msg.length > 5 ? msg.slice(5) : null; //payload is the rest of the message after the message ID
+  if (id === 6 || id === 7 || id === 8) {
+    const rest = payload.slice(8);
+    payload = {
+      index: payload.readUInt32BE(0),
+      begin: payload.readUInt32BE(4),
+    };
+    payload[id === 7 ? "block" : "length"] = rest;
+  }
+};
+
 export {
   buildHandShake,
   buildKeepAlive,
@@ -188,4 +204,5 @@ export {
   buildPiece,
   buildCancel,
   buildPort,
+  parse,
 };
