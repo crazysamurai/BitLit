@@ -1,5 +1,4 @@
-import {pieceIndex, blocksPerPiece, BLOCK_LEN} from "./torrent-parser"
-import {torrent} from "../index"
+import {blocksPerPiece, BLOCK_LEN, blockLen} from "./torrent-parser.js"
 
 class Queue {
     #torrent;
@@ -16,7 +15,7 @@ class Queue {
           const pieceBlock = {
             index: pieceIndex,
             begin: i * BLOCK_LEN,
-            length: this.blockLen(this.#torrent, pieceIndex, i)
+            length: blockLen(this.#torrent, pieceIndex, i)
           };
           this.#queue.push(pieceBlock);
           //pieceBlock objects have the same structure as the payload when we send a request message so we can pass them to the request builder directly.

@@ -27,25 +27,25 @@ const size = (torrent) => {
 const BLOCK_LEN = Math.pow(2,14)
 
 const pieceLen = (torrent, pieceIndex) => {
-  const totalLength = size(torrent).readBigUInt64BE();
+  const totalLength = Number(size(torrent).readBigUInt64BE());
   const pieceLength = torrent.info['piece length'];
-  const lastPieceLength = totalLength%pieceLength;
+  const lastPieceLength = totalLength % pieceLength;
   const lastPieceIndex = Math.floor(totalLength/pieceLength);
   return lastPieceIndex === pieceIndex ? lastPieceIndex : lastPieceLength;
 }
 
 const blocksPerPiece = (torrent, pieceIndex)=>{
-  const pieceLength = this.pieceLen(torrent, pieceIndex);
-  return Math.ceil(pieceLength / this.BLOCK_LEN);
+  const pieceLength = pieceLen(torrent, pieceIndex);
+  return Math.ceil(pieceLength / BLOCK_LEN);
 }
 
 const blockLen = (torrent, pieceIndex, blockIndex)=>{
-  const pieceLength = this.pieceLen(torrent, pieceIndex);
+  const pieceLength = pieceLen(torrent, pieceIndex);
 
-  const lastPieceLength = pieceLength % this.BLOCK_LEN;
-  const lastPieceIndex = Math.floor(pieceLength / this.BLOCK_LEN);
+  const lastPieceLength = pieceLength % BLOCK_LEN;
+  const lastPieceIndex = Math.floor(pieceLength / BLOCK_LEN);
 
-  return blockIndex === lastPieceIndex ? lastPieceLength : this.BLOCK_LEN;
+  return blockIndex === lastPieceIndex ? lastPieceLength : BLOCK_LEN;
 }
 
 export { open, size, infoHash, BLOCK_LEN, pieceLen, blocksPerPiece, blockLen };

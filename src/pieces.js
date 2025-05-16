@@ -1,5 +1,4 @@
-import {torrent} from "../index"
-import { BLOCK_LEN, blocksPerPiece } from "./torrent-parser"
+import { BLOCK_LEN, blocksPerPiece } from "./torrent-parser.js"
 
 class Pieces {
   #requested;

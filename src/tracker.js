@@ -8,8 +8,9 @@ import { group } from "./groups.js";
 
 //remember to update the function to select the tracker with most peers
 export const getPeers = async (torrent, callback) => {
+  
   const socket = dgram.createSocket("udp4");
-
+  
   let rawUrl;
   let listLength = 0; //length of announce-list
   let flag = false; //flag to check if announce-list is present
@@ -30,13 +31,13 @@ export const getPeers = async (torrent, callback) => {
       } else {
         rawUrl = new URL(new Buffer.from(torrent.announce).toString("utf-8"));
       }
-
+      
       const response = await new Promise((resolve, reject) => {
         let timeout;
 
         //listen for response from tracker
         socket.on("message", (res) => {
-          console.log("response from tracker:", rawUrl.href);
+          // console.log("response from tracker:", rawUrl.href);
           clearTimeout(timeout); //clear timeout
           resolve(res); //resolve with response
         });
@@ -165,10 +166,10 @@ function buildAnnounceReq(connId, torrent, port = 6881) {
   Buffer.alloc(8).copy(buf, 72);
 
   // event
-  buf.writeUInt32BE(0, 80);
+  buf.writeUInt32BE(0, 84);
 
   // ip address
-  buf.writeUInt32BE(0, 80);
+  buf.writeUInt32BE(0, 84);
 
   // key
   crypto.randomBytes(4).copy(buf, 88);

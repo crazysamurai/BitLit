@@ -1,5 +1,5 @@
-import { infoHash } from "./torrent-parser";
 import { genId } from "./util.js";
+import { infoHash } from "./torrent-parser.js";
 
 //https://wiki.theory.org/BitTorrentSpecification#Messages
 
@@ -27,7 +27,7 @@ const buildHandShake = (torrent) => {
   infoHash(torrent).copy(buf, 28); //info_hash is a 20-byte buffer, so we copy it to the handshake buffer starting at byte 28
 
   //peer_id
-  buf.write(genId());
+  genId().copy(buf, 48)
 
   return buf;
 };
@@ -57,6 +57,7 @@ const buildInterested = () => {
   //length prefix
   buf.writeUInt32BE(1, 0); // 1 byte for the message ID + 4 bytes for the length prefix
   buf.writeUInt8(2, 4); // 2 for interested message ID
+  return buf;
 };
 
 const buildUninterested = () => {
@@ -188,6 +189,11 @@ const parse = (msg) => {
       begin: payload.readUInt32BE(4),
     };
     payload[id === 7 ? "block" : "length"] = rest;
+  }
+  return {
+    size : msg.readInt32BE(0),
+    id : id,
+    payload : payload
   }
 };
 

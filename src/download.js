@@ -1,7 +1,6 @@
 import net from "node:net"; //for TCP connections
 import fs from "fs";
 import * as message from "./message.js";
-import torrent from "../index.js";
 import Pieces from "./pieces.js";
 import Queue from "./queue.js";
 
@@ -11,46 +10,43 @@ const iteratePeers = (peers, torrent, path) => {
   peers.forEach((peer) => download(peer, torrent, pieces, file));
 };
 
-const onWholeMessage = (socket, callback) => {
-  let buf = Buffer.alloc(0); // Initialize an empty buffer
-  let handshake = true; //the handshake message can only be identified if it is the first message sent by the peer, it doesn't have a length prefix like others. Also because we're using closure here it'll be true only once and then false for the rest of the messages
-
-  socket.on("data", (receivedBuffer) => {
-    const msgLen = 0;
-
-    if (handshake) {
-      buf.readUInt8(0) + 49; // 49 is the length of the handshake message, so we can read it from the buffer
-    } else {
-      buf.readInt32BE(0) + 4; // 4 is the length of the message ID + length prefix for the rest of the messages
-    }
-
-    while (buf.length >= 4 && buf.length >= msgLen) {
-      callback(buf.slice(0, msgLen)); // Call the callback with the message
-      buf = buf.slice(msgLen); // Remove the message from the buffer
-      handshake = false; // Set handshake to false after the first message
-    }
-  });
-};
-
 const download = (peer, torrent, pieces, file) => {
-  //   console.log("downloading from peer:", peer);
-  const socket = new net.socket();
-  socket.on("error", console.log);
+ // console.log("trying to download from peer:", peer);
+  const socket = new net.Socket();
+  socket.on("error", ()=>{});
 
   socket.connect(peer.port, peer.ip, () => {
     socket.write(message.buildHandShake(torrent)); //send handshake message to peer
+    // console.log("connected to: " + peer.ip)
   });
 
   const queue = new Queue(torrent)
-
+  // console.log(queue)
   onWholeMessage(socket, (msg) => msgHandler(msg, socket, pieces, queue, torrent, file));
+};
+
+const onWholeMessage = (socket, callback) => {
+  let savedBuf = Buffer.alloc(0);
+  let handshake = true;
+
+  socket.on('data', recvBuf => {
+    // msgLen calculates the length of a whole message
+    const msgLen = () => handshake ? savedBuf.readUInt8(0) + 49 : savedBuf.readInt32BE(0) + 4;
+    savedBuf = Buffer.concat([savedBuf, recvBuf]);
+
+    while (savedBuf.length >= 4 && savedBuf.length >= msgLen()) {
+      callback(savedBuf.slice(0, msgLen()));
+      savedBuf = savedBuf.slice(msgLen());
+      handshake = false;
+    }
+  });
 };
 
 const msgHandler = (msg, socket, pieces, queue, torrent, file) => {
   if (isHandShake(msg)) socket.write(message.buildInterested());
   //checks if the message is a handshake response, and if so it sends the interested message and hopefully the peer will send an unchoke message.
   else {
-    const m = parse(msg);
+    const m = message.parse(msg);
     if (m.id === 0) chokeHandler(socket);
     if (m.id === 1) unchokeHandler(socket, pieces, queue);
     if (m.id === 4) haveHandler(socket, pieces, queue, m.payload);
@@ -69,7 +65,7 @@ const unchokeHandler = (socket, pieces, queue) => {
 };
 
 const haveHandler = (socket, pieces, queue, payload) => {
-  const pieceIndex = payload.readUINT32BE(0);
+  const pieceIndex = payload.readUInt32BE(0);
   const queueEmpty = queue.length === 0;
   queue.queue(pieceIndex);
   if (queueEmpty) requestPiece(socket, pieces, queue);
@@ -88,7 +84,7 @@ const bitfieldHandler = (socket, pieces, queue, payload) => {
 };
 
 const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
-  console.log(pieceResp);
+  // console.log('called pieceHandler');
   pieces.addReceived(pieceResp);
 
   const offset = pieceResp.index * torrent.info['piece length'] + pieceResp.begin;
@@ -110,8 +106,10 @@ const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
 const requestPiece = (socket, pieces, queue) => {
   if (queue.choked) return null;
 
+  if (socket.destroyed || !socket.writable) return null;
   while (queue.length()) {
     const pieceBlock = queue.dequeue();
+    // console.log(pieceBlock);
     if (pieces.needed(pieceBlock)) {
       socket.write(message.buildRequest(pieceBlock));
       pieces.addRequested(pieceBlock);
@@ -123,7 +121,7 @@ const requestPiece = (socket, pieces, queue) => {
 const isHandShake = (msg) => {
   return (
     msg.length === msg.readUInt8(0) + 49 &&
-    msg.toString("utf-8", 1) === "BitTorrent protocol"
+    msg.toString("utf-8", 1, 1+msg.readUInt8(0)) === "BitTorrent protocol"
   );
 };
 
