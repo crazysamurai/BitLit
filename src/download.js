@@ -3,15 +3,19 @@ import fs from "fs";
 import * as message from "./message.js";
 import Pieces from "./pieces.js";
 import Queue from "./queue.js";
+import { updateStatus } from "../screen/ui.js";
+import speedometer from "speedometer";
 
 const iteratePeers = (peers, torrent, path) => {
+  // updateStatus("Connecting with peers...")
   const pieces = new Pieces(torrent);
+
   const file = fs.openSync(path, 'w');
   peers.forEach((peer) => download(peer, torrent, pieces, file));
 };
 
 const download = (peer, torrent, pieces, file) => {
- // console.log("trying to download from peer:", peer);
+//  updateStatus("Trying to download from peers...");
   const socket = new net.Socket();
   socket.on("error", ()=>{});
 
@@ -20,7 +24,7 @@ const download = (peer, torrent, pieces, file) => {
     // console.log("connected to: " + peer.ip)
   });
 
-  const queue = new Queue(torrent)
+  const queue  = new Queue(torrent)
   // console.log(queue)
   onWholeMessage(socket, (msg) => msgHandler(msg, socket, pieces, queue, torrent, file));
 };
@@ -124,5 +128,9 @@ const isHandShake = (msg) => {
     msg.toString("utf-8", 1, 1+msg.readUInt8(0)) === "BitTorrent protocol"
   );
 };
+
+
+const speed = speedometer()
+
 
 export { download, iteratePeers };

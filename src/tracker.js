@@ -3,12 +3,13 @@ import crypto from "node:crypto";
 import * as torrentParser from "./torrent-parser.js";
 import { genId } from "./util.js";
 import { group } from "./groups.js";
+import { updateStatus } from "../screen/ui.js";
 
 //protocol to get the list of peers
 
 //remember to update the function to select the tracker with most peers
 export const getPeers = async (torrent, callback) => {
-  
+  updateStatus("Looking for trackers...")
   const socket = dgram.createSocket("udp4");
   
   let rawUrl;
@@ -37,7 +38,7 @@ export const getPeers = async (torrent, callback) => {
 
         //listen for response from tracker
         socket.on("message", (res) => {
-          // console.log("response from tracker:", rawUrl.href);
+          updateStatus("Connected to tracker: " + rawUrl.href.slice(rawUrl.href.indexOf("://") + 3));
           clearTimeout(timeout); //clear timeout
           resolve(res); //resolve with response
         });
@@ -63,7 +64,7 @@ export const getPeers = async (torrent, callback) => {
       }
       break;
     } catch (err) {
-      console.error(err.message, rawUrl.href);
+      updateStatus(err.message + ": " + rawUrl.href.slice(rawUrl.href.indexOf("://") + 3));
       continue;
     }
   }

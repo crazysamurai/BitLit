@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "bencode": "^4.0.0",
-    "blessed": "^0.1.81"
+    "blessed": "^0.1.81",
+    "speedometer": "^1.1.0"
   }
 }

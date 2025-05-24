@@ -21,7 +21,6 @@ const layout = blessed.layout({
   layout: 'inline'
 });
 
-
 const logoBox = blessed.text({
   parent: layout,
   top: 0,
@@ -56,12 +55,14 @@ const contentBox = blessed.box({
 
 const updateUI = () => {
   contentBox.setContent(
-    ` Torrent Name: ${state.torrentName}\n
+    ` 
+      Torrent Name: ${state.torrentName}\n
+      Status: ${state.status}\n
       File Size: ${state.size}\n
-      Remaining Download: ${state.remaining}
-      Number of Peers: ${state.peers}
-      Total Pieces: ${state.totalPieces}
-      Missing Pieces: ${state.missingPieces}
+      Remaining Download: ${state.remaining}\n
+      Number of Peers: ${state.peers}\n
+      Total Pieces: ${state.totalPieces}\n
+      Missing Pieces: ${state.missingPieces}\n
     `
   )
   screen.render()
@@ -75,22 +76,36 @@ function updateError(newError) {
 function updatetorrentName(newtorrentName) {
   state.torrentName = newtorrentName;
   updateUI();
-  screen.render()
+}
+
+function updateStatus(newStatus){
+  state.status = newStatus;
+  updateUI();
+}
+
+function updateSize(newSize) {
+
+  let totalSize;
+  if(newSize<2**10){
+    totalSize = `${newSize.toFixed(2)} B`
+  }else if(newSize<2**20){
+    totalSize = `${(newSize/2**10).toFixed(2)} KB`
+  }else if(newSize<2**30){
+    totalSize = `${(newSize/2**20).toFixed(2)} MB`
+  }else{
+    totalSize = `${(newSize/2**30).toFixed(2)} GB`
+  }
+  state.size = totalSize;
+  updateUI();
 }
 
 function updatePeers(newPeers) {
   state.peers = newPeers;
   updateUI();
-  screen.render()
 }
 
 function updateProgress(newProgress) {
   state.progress = newProgress;
-  updateUI();
-}
-
-function updateSize(newSize) {
-  state.size = newSize;
   updateUI();
 }
 
@@ -114,4 +129,4 @@ screen.key(['escape', 'q', 'C-c'], function (ch, key) {
 
 screen.render()
 
-export { updateError, updateMissingPieces, updatePeers, updateProgress, updateSize, updateTotalPieces, updatetorrentName }
+export { updateStatus, updateError, updateMissingPieces, updatePeers, updateProgress, updateSize, updateTotalPieces, updatetorrentName }

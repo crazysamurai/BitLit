@@ -14,6 +14,13 @@ const infoHash = (torrent) => {
   return crypto.createHash("sha1").update(info).digest(); // SHA1 is one of many hashing functions but it’s the one used by bittorrent so in our case no other hashing function will do. We want to use a hash because it’s a compact way to uniqely identify the torrent. A hashing function returns a fixed length buffer (in this case 20-bytes long).
 };
 
+/**
+ * Given a torrent object, returns a 64-bit big-endian Buffer
+ * representing the total size of the torrent in bytes.
+ *
+ * @param {Object} torrent - A torrent object with an info property
+ * @returns {Buffer} An 8-byte Buffer representing the total size of the torrent
+ */
 const size = (torrent) => {
   const size = torrent.info.files
     ? torrent.info.files.map((file) => file.length).reduce((a, b) => a + b) //if multiple files, traverse the array of files and sum their lengths

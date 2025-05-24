@@ -1,14 +1,15 @@
 import { getPeers } from "./src/tracker.js";
-import { open } from "./src/torrent-parser.js";
+import { open, size } from "./src/torrent-parser.js";
 import { iteratePeers } from "./src/download.js";
 import {download} from "./src/download.js"
-import {updatetorrentName, updateError} from "./screen/ui.js"
+import {updatetorrentName, updateError, updateStatus, updatePeers, updateSize} from "./screen/ui.js"
 
 const showErrorAndExit = (message) => {
     updateError(message + "\nExiting in 5 seconds...");
 };
 
 const input = "./torrents/linuxmint-22.1-cinnamon-64bit.iso.torrent"
+
 if(!input.endsWith(".torrent")){
     showErrorAndExit("Please provide a valid torrent file")
     await new Promise(resolve => setTimeout(resolve, 5000));
@@ -25,6 +26,7 @@ try{
     process.exit(1)
 }
 
+//"./torrents/linuxmint-22.1-cinnamon-64bit.iso.torrent"
 // "./torrents/Sniper Elite 5 [DODI Repack].torrent"
 // "./torrents/1torr.torrent"
 //const torrent = torrentParser.open(process.argv[2]);
@@ -32,8 +34,11 @@ try{
 
 getPeers(torrent, (callback)=>{
     // console.log(callback)
+    updateStatus("Connecting with peers...")
     let path = new Buffer.from(torrent.info.name).toString('utf-8')
     updatetorrentName(path)
+    updateSize(Number(size(torrent).readBigUInt64BE()))
+    updatePeers(callback.length)
     iteratePeers(callback, torrent, path);
 });
 
