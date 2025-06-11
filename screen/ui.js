@@ -1,30 +1,37 @@
 import blessed from "blessed";
+import { pieceSize } from "../index.js";
+import { log } from "../src/util.js";
 
 const state = {
-  torrentName: 'abc.torrent',
-  size: 0,
-  remaining: 0,
+  torrentName: "Getting torrent info...",
+  size: 0, //total size of the torrent
+  totalSizeInBytes: 0, // total size in bytes
+  remaining: 0, //remaining size to download
+  downloadedBytes: 0, // bytes downloaded so far
   peers: 0,
   totalPieces: 0,
   missingPieces: 0,
-  progress: 0,
-}
+  availablePieces: 0,
+  progress: 0, //progress percentage
+  downloadSpeed: 0, //current download speed in B/s
+  uploadSpeed: 0, //current upload speed in B/s
+  averageDownloadSpeed: 0, //average download speed in B/s
+  count: 0,
+  diskUtilization: 0, //disk utilization in MB/s
+  remainingTime: "∞",
+};
 
-const screen = blessed.screen({ smartCSR: true })
+const screen = blessed.screen({ smartCSR: true });
 
-screen.title = "BitLit"
-
-const layout = blessed.layout({
-  parent: screen,
-  width: '100%',
-  height: '100%',
-  layout: 'inline'
-});
+screen.title = "BitLit";
 
 const logoBox = blessed.text({
-  parent: layout,
+  parent: screen,
+  width: "shrink",
+  height: 7,
+  left: "center",
+  align: "center",
   top: 0,
-  left: 3,
   content: `
     ____     _    __     __     _    __ 
    / __ )   (_)  / /_   / /    (_)  / /_
@@ -33,69 +40,90 @@ const logoBox = blessed.text({
 /_____/  /_/   \\__/  /_____//_/   \\__/                                         
 `,
   style: {
-    fg: 'yellow',
-    bg: 'black',
-    width: 'shrink',
-    height: 'shrink'
-  }
+    fg: "green",
+    bg: "black",
+  },
+});
+
+const progressBar = blessed.progressbar({
+  parent: screen,
+  width: "75%",
+  height: 3,
+  left: "center",
+  top: "100%-4",
+  orientation: "horizontal",
+  style: {
+    fg: "white",
+    bg: "black",
+    bar: {
+      bg: "green",
+      fg: "green",
+    },
+    border: { fg: "white" },
+  },
+  border: "line",
+  filled: 0,
+  label: "Download Progress",
 });
 
 const contentBox = blessed.box({
-  parent: layout,
-  top: 7, 
-  left: 0,
-  width: '100%',
-  height: '100%-7',
-  tags:true,
+  parent: screen,
+  top: 7,
+  left: "center",
+  width: "80%",
+  height: "100%-10",
+  tags: true,
   style: {
-    fg: 'white',
-    bg: 'black'
-  }
+    fg: "white",
+    bg: "black",
+  },
 });
 
 const updateUI = () => {
-  contentBox.setContent(
-    ` 
+  contentBox.setContent(`
       Torrent Name: ${state.torrentName}\n
       Status: ${state.status}\n
       File Size: ${state.size}\n
       Remaining Download: ${state.remaining}\n
+      Estimated Time Left: ${state.remainingTime}\n
       Number of Peers: ${state.peers}\n
       Total Pieces: ${state.totalPieces}\n
       Missing Pieces: ${state.missingPieces}\n
-    `
-  )
-  screen.render()
-}
+      Network Activity: ↑ ${((state.uploadSpeed * 8) / 1_000_000).toFixed(
+        2
+      )} Mb/s    ↓ ${((state.downloadSpeed * 8) / 1_000_000).toFixed(2)} Mb/s\n
+      Average Download Speed: ${(
+        (state.averageDownloadSpeed * 8) /
+        1_000_000
+      ).toFixed(2)} Mb/s\n
+      Disk Utilization: ${state.diskUtilization} MB/s\n
+    `);
+  const percent = state.totalSizeInBytes
+    ? Math.min(100, (state.downloadedBytes / state.totalSizeInBytes) * 100)
+    : 0;
+  progressBar.setProgress(percent);
+  screen.render();
+};
 
 function updateError(newError) {
-  contentBox.setContent(`{red-fg}{bold}Error: ${newError}{/bold}{/red-fg}`)
-  screen.render()
+  contentBox.setContent(`{red-fg}{bold}Error: ${newError}{/bold}{/red-fg}`);
+  screen.render();
 }
 
-function updatetorrentName(newtorrentName) {
+function updateTorrentName(newtorrentName) {
   state.torrentName = newtorrentName;
   updateUI();
 }
 
-function updateStatus(newStatus){
+function updateStatus(newStatus) {
   state.status = newStatus;
   updateUI();
 }
 
 function updateSize(newSize) {
-
-  let totalSize;
-  if(newSize<2**10){
-    totalSize = `${newSize.toFixed(2)} B`
-  }else if(newSize<2**20){
-    totalSize = `${(newSize/2**10).toFixed(2)} KB`
-  }else if(newSize<2**30){
-    totalSize = `${(newSize/2**20).toFixed(2)} MB`
-  }else{
-    totalSize = `${(newSize/2**30).toFixed(2)} GB`
-  }
-  state.size = totalSize;
+  updateTotalPieces(newSize);
+  state.totalSizeInBytes = newSize;
+  state.size = formatSize(newSize);
   updateUI();
 }
 
@@ -104,29 +132,129 @@ function updatePeers(newPeers) {
   updateUI();
 }
 
+function updateDownloadSpeed(newDownloadSpeed) {
+  state.downloadSpeed = newDownloadSpeed; //bytes per second
+  updateUI();
+}
+
+function updateUploadSpeed(newUploadSpeed) {
+  state.uploadSpeed = newUploadSpeed; //bytes per second
+  updateUI();
+}
+
+function updateRemaining(downloadedLength) {
+  state.downloadedBytes += downloadedLength;
+  // log(`Downloaded bytes: ${state.downloadedBytes}`);
+  const remainingBytes = state.totalSizeInBytes - state.downloadedBytes;
+  // log(`Remaining bytes: ${remainingBytes}`);
+  state.remaining = formatSize(remainingBytes);
+  if (state.downloadedBytes >= state.totalSizeInBytes) {
+    state.missingPieces = 0;
+  } else {
+    state.missingPieces = Math.ceil(remainingBytes / pieceSize);
+  }
+  updateUI();
+}
+
+function updateTotalPieces(torrSize) {
+  const newTotalPieces = Math.ceil(torrSize / pieceSize);
+  state.totalPieces = newTotalPieces;
+  state.missingPieces = newTotalPieces;
+  updateUI();
+}
+
+function updateDiskUtilization(newDiskUtilization) {
+  // When calculating disk utilization, check for Infinity or NaN
+  state.diskUtilization = isFinite(newDiskUtilization) ? newDiskUtilization : 0;
+  updateUI();
+}
+
 function updateProgress(newProgress) {
   state.progress = newProgress;
   updateUI();
 }
 
-function updateTotalPieces(newTotalPieces) {
-  state.totalPieces = newTotalPieces;
+function updateRemainingTime() {
+  if (state.downloadedBytes >= state.totalSizeInBytes) {
+    state.remainingTime = "00:00";
+    updateUI();
+    return;
+  }
+  const avgSpeed = state.averageDownloadSpeed;
+  if (avgSpeed <= 0 || state.totalSizeInBytes <= 0) {
+    state.remainingTime = "∞";
+    updateUI();
+    return;
+  }
+  const remainingBytes = state.totalSizeInBytes - state.downloadedBytes;
+  const secondsLeft = remainingBytes / avgSpeed;
+  state.remainingTime = formatTime(secondsLeft);
   updateUI();
 }
 
-function updateMissingPieces(newMissingPieces) {
-  state.missingPieces = newMissingPieces;
+function formatSize(newSize) {
+  let totalSize;
+  if (newSize < 2 ** 10) {
+    totalSize = `${newSize.toFixed(2)} B`;
+  } else if (newSize < 2 ** 20) {
+    totalSize = `${(newSize / 2 ** 10).toFixed(2)} KB`;
+  } else if (newSize < 2 ** 30) {
+    totalSize = `${(newSize / 2 ** 20).toFixed(2)} MB`;
+  } else {
+    totalSize = `${(newSize / 2 ** 30).toFixed(2)} GB`;
+  }
+  return totalSize;
+}
+
+function formatTime(seconds) {
+  if (!isFinite(seconds) || seconds < 0) return "Unknown";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return [
+    h > 0 ? String(h).padStart(2, "0") : null,
+    String(m).padStart(2, "0"),
+    String(s).padStart(2, "0"),
+  ]
+    .filter(Boolean)
+    .join(":");
+}
+
+function updateAverageDownloadSpeed(currentSpeed) {
+  state.count++;
+  if (state.count === 1) {
+    state.averageDownloadSpeed = currentSpeed;
+  } else {
+    state.averageDownloadSpeed =
+      (state.averageDownloadSpeed * (state.count - 1) + currentSpeed) /
+      state.count;
+  }
+  updateRemainingTime();
   updateUI();
 }
 
-
-screen.append(layout)
+screen.append(contentBox);
+screen.append(progressBar);
+screen.append(logoBox);
 
 // Quit on Escape, q, or Control-C.
-screen.key(['escape', 'q', 'C-c'], function (ch, key) {
+screen.key(["escape", "q", "C-c"], function (ch, key) {
   return process.exit(0);
 });
 
-screen.render()
+screen.render();
 
-export { updateStatus, updateError, updateMissingPieces, updatePeers, updateProgress, updateSize, updateTotalPieces, updatetorrentName }
+export {
+  updateDownloadSpeed,
+  updateUploadSpeed,
+  updateStatus,
+  updateError,
+  updatePeers,
+  updateProgress,
+  updateSize,
+  updateTotalPieces,
+  updateTorrentName,
+  updateRemaining,
+  updateDiskUtilization,
+  updateAverageDownloadSpeed,
+};

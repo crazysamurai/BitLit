@@ -3,40 +3,69 @@ import fs from "fs";
 import * as message from "./message.js";
 import Pieces from "./pieces.js";
 import Queue from "./queue.js";
-import { updateStatus } from "../screen/ui.js";
+import {
+  updateStatus,
+  updateDownloadSpeed,
+  updateRemaining,
+  updateDiskUtilization,
+  updateAverageDownloadSpeed,
+} from "../screen/ui.js";
 import speedometer from "speedometer";
 
 const iteratePeers = (peers, torrent, path) => {
-  // updateStatus("Connecting with peers...")
+  updateStatus("Connecting with peers...");
   const pieces = new Pieces(torrent);
 
-  const file = fs.openSync(path, 'w');
+  const file = fs.openSync(path, "w");
   peers.forEach((peer) => download(peer, torrent, pieces, file));
 };
 
 const download = (peer, torrent, pieces, file) => {
-//  updateStatus("Trying to download from peers...");
+  updateStatus("Trying to download from peers...");
   const socket = new net.Socket();
-  socket.on("error", ()=>{});
+  socket.on("error", () => {});
 
   socket.connect(peer.port, peer.ip, () => {
     socket.write(message.buildHandShake(torrent)); //send handshake message to peer
     // console.log("connected to: " + peer.ip)
   });
 
-  const queue  = new Queue(torrent)
+  const queue = new Queue(torrent);
   // console.log(queue)
-  onWholeMessage(socket, (msg) => msgHandler(msg, socket, pieces, queue, torrent, file));
+  onWholeMessage(socket, (msg) =>
+    msgHandler(msg, socket, pieces, queue, torrent, file)
+  );
 };
 
+let lastSpeedUpdate = 0;
 const onWholeMessage = (socket, callback) => {
   let savedBuf = Buffer.alloc(0);
   let handshake = true;
 
-  socket.on('data', recvBuf => {
+  const downSpeed = speedometer();
+  const UPDATE_INTERVAL = 3000;
+
+  socket.on("data", (recvBuf) => {
     // msgLen calculates the length of a whole message
-    const msgLen = () => handshake ? savedBuf.readUInt8(0) + 49 : savedBuf.readInt32BE(0) + 4;
+    const msgLen = () => {
+      if (handshake) {
+        if (savedBuf.length < 1) return Infinity; // Not enough data for handshake
+        return savedBuf.readUInt8(0) + 49;
+      } else {
+        if (savedBuf.length < 4) return Infinity; // Not enough data for message length
+        return savedBuf.readInt32BE(0) + 4;
+      }
+    };
     savedBuf = Buffer.concat([savedBuf, recvBuf]);
+
+    const currentSpeed = downSpeed(msgLen()); // bytes per second
+    const now = Date.now();
+    if (now - lastSpeedUpdate >= UPDATE_INTERVAL) {
+      // let speedInKB = (currentSpeed / 1024).toFixed(2);
+      updateDownloadSpeed(currentSpeed);
+      updateAverageDownloadSpeed(currentSpeed);
+      lastSpeedUpdate = now;
+    }
 
     while (savedBuf.length >= 4 && savedBuf.length >= msgLen()) {
       callback(savedBuf.slice(0, msgLen()));
@@ -55,7 +84,8 @@ const msgHandler = (msg, socket, pieces, queue, torrent, file) => {
     if (m.id === 1) unchokeHandler(socket, pieces, queue);
     if (m.id === 4) haveHandler(socket, pieces, queue, m.payload);
     if (m.id === 5) bitfieldHandler(socket, pieces, queue, m.payload);
-    if (m.id === 7) pieceHandler(socket, pieces, queue, torrent, file, m.payload);
+    if (m.id === 7)
+      pieceHandler(socket, pieces, queue, torrent, file, m.payload);
   }
 };
 
@@ -87,22 +117,37 @@ const bitfieldHandler = (socket, pieces, queue, payload) => {
   if (queueEmpty) requestPiece(socket, pieces, queue);
 };
 
+let lastDiskUtilUpdate = 0;
 const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
   // console.log('called pieceHandler');
   pieces.addReceived(pieceResp);
 
-  const offset = pieceResp.index * torrent.info['piece length'] + pieceResp.begin;
-  fs.write(file, pieceResp.block, 0, pieceResp.block.length, offset, () => {});
+  updateRemaining(pieceResp.block.length);
 
-  if(pieces.isDone()){
-    socket.end();
-    console.log("Finished downloading")
-    try{
-      fs.closeSync(file);
-      console.log("Finished Writing")
+  const offset =
+    pieceResp.index * torrent.info["piece length"] + pieceResp.begin;
+    
+  const start = Date.now(); // Start time for speed calculation
+  fs.write(file, pieceResp.block, 0, pieceResp.block.length, offset, () => {
+    const duration = Date.now() - start; // ms
+    const speed = pieceResp.block.length / (duration / 1000); // bytes/sec
+    const now = Date.now();
+    if (now - lastDiskUtilUpdate >= 3000) {
+      updateDiskUtilization((speed / 2 ** 20).toFixed(2));
+      lastDiskUtilUpdate = now;
     }
-    catch(err){console.log("Error writing file: " + err)}
-  }else{
+  });
+
+  if (pieces.isDone()) {
+    socket.end();
+    updateStatus("Finished downloading");
+    try {
+      fs.closeSync(file);
+      updateStatus("Finished Writing");
+    } catch (err) {
+      updateError("Error writing file: " + err);
+    }
+  } else {
     requestPiece(socket, pieces, queue);
   }
 };
@@ -125,12 +170,8 @@ const requestPiece = (socket, pieces, queue) => {
 const isHandShake = (msg) => {
   return (
     msg.length === msg.readUInt8(0) + 49 &&
-    msg.toString("utf-8", 1, 1+msg.readUInt8(0)) === "BitTorrent protocol"
+    msg.toString("utf-8", 1, 1 + msg.readUInt8(0)) === "BitTorrent protocol"
   );
 };
-
-
-const speed = speedometer()
-
 
 export { download, iteratePeers };
