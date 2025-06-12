@@ -27,7 +27,7 @@ const buildHandShake = (torrent) => {
   infoHash(torrent).copy(buf, 28); //info_hash is a 20-byte buffer, so we copy it to the handshake buffer starting at byte 28
 
   //peer_id
-  genId().copy(buf, 48)
+  genId().copy(buf, 48);
 
   return buf;
 };
@@ -65,6 +65,7 @@ const buildUninterested = () => {
   //length prefix
   buf.writeUInt32BE(1, 0); // 1 byte for the message ID + 4 bytes for the length prefix
   buf.writeUInt8(3, 4); // 3 for uninterested message ID
+  return buf;
 };
 
 const buildHave = (payload) => {
@@ -83,7 +84,7 @@ const buildHave = (payload) => {
 };
 
 const buildBitfield = (bitfield) => {
-  const buf = Buffer.alloc(14);
+  const buf = Buffer.alloc(bitfield.length + 1 + 4); // 1 byte for the message ID + 4 bytes for the length prefix + bitfield length
 
   //length
   buf.writeUint32BE(payload.length + 1, 0); //length of the message + 1 for the message ID
@@ -191,10 +192,10 @@ const parse = (msg) => {
     payload[id === 7 ? "block" : "length"] = rest;
   }
   return {
-    size : msg.readInt32BE(0),
-    id : id,
-    payload : payload
-  }
+    size: msg.readInt32BE(0),
+    id: id,
+    payload: payload,
+  };
 };
 
 export {

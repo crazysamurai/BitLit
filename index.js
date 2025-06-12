@@ -35,7 +35,6 @@ try {
   process.exit(1);
 }
 
-//
 //"./torrents/linuxmint-22.1-cinnamon-64bit.iso.torrent"
 // "./torrents/Sniper Elite 5 [DODI Repack].torrent"
 // "./torrents/1torr.torrent"
@@ -45,7 +44,6 @@ try {
 const pieceSize = torrent.info["piece length"];
 
 getPeers(torrent, (callback) => {
-  // console.log(callback)
   updateStatus("Connecting with peers...");
   let path = new Buffer.from(torrent.info.name).toString("utf-8");
   updateTorrentName(path);

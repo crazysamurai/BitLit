@@ -1,16 +1,20 @@
 import net from "node:net"; //for TCP connections
 import fs from "fs";
+import speedometer from "speedometer";
 import * as message from "./message.js";
 import Pieces from "./pieces.js";
 import Queue from "./queue.js";
 import {
   updateStatus,
   updateDownloadSpeed,
-  updateRemaining,
   updateDiskUtilization,
   updateAverageDownloadSpeed,
+  updateRemainingPieces,
+  stopElapsedTimer,
+  updateError,
 } from "../screen/ui.js";
-import speedometer from "speedometer";
+
+import { log } from "./util.js";
 
 const iteratePeers = (peers, torrent, path) => {
   updateStatus("Connecting with peers...");
@@ -31,7 +35,13 @@ const download = (peer, torrent, pieces, file) => {
   });
 
   const queue = new Queue(torrent);
-  // console.log(queue)
+
+  if (!pieces.expireTimer) {
+    pieces.expireTimer = setInterval(() => {
+      pieces.expireOldRequests();
+    }, 2000);
+  }
+
   onWholeMessage(socket, (msg) =>
     msgHandler(msg, socket, pieces, queue, torrent, file)
   );
@@ -43,7 +53,7 @@ const onWholeMessage = (socket, callback) => {
   let handshake = true;
 
   const downSpeed = speedometer();
-  const UPDATE_INTERVAL = 3000;
+  const UPDATE_INTERVAL = 2000;
 
   socket.on("data", (recvBuf) => {
     // msgLen calculates the length of a whole message
@@ -61,9 +71,8 @@ const onWholeMessage = (socket, callback) => {
     const currentSpeed = downSpeed(msgLen()); // bytes per second
     const now = Date.now();
     if (now - lastSpeedUpdate >= UPDATE_INTERVAL) {
-      // let speedInKB = (currentSpeed / 1024).toFixed(2);
       updateDownloadSpeed(currentSpeed);
-      updateAverageDownloadSpeed(currentSpeed);
+      updateAverageDownloadSpeed();
       lastSpeedUpdate = now;
     }
 
@@ -122,11 +131,12 @@ const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
   // console.log('called pieceHandler');
   pieces.addReceived(pieceResp);
 
-  updateRemaining(pieceResp.block.length);
+  // updateRemaining(pieces.getDownloadedBytes(torrent));
+  updateRemainingPieces(pieces.getMissingPieces());
 
   const offset =
     pieceResp.index * torrent.info["piece length"] + pieceResp.begin;
-    
+
   const start = Date.now(); // Start time for speed calculation
   fs.write(file, pieceResp.block, 0, pieceResp.block.length, offset, () => {
     const duration = Date.now() - start; // ms
@@ -147,6 +157,14 @@ const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
     } catch (err) {
       updateError("Error writing file: " + err);
     }
+    updateAverageDownloadSpeed();
+    updateRemainingPieces(0);
+    updateDiskUtilization(0);
+    stopElapsedTimer();
+    if (pieces.expireTimer) {
+      clearInterval(pieces.expireTimer);
+      pieces.expireTimer = null;
+    }
   } else {
     requestPiece(socket, pieces, queue);
   }
@@ -154,11 +172,10 @@ const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
 
 const requestPiece = (socket, pieces, queue) => {
   if (queue.choked) return null;
-
+  log(`queue length: ${queue.length()}`);
   if (socket.destroyed || !socket.writable) return null;
   while (queue.length()) {
     const pieceBlock = queue.dequeue();
-    // console.log(pieceBlock);
     if (pieces.needed(pieceBlock)) {
       socket.write(message.buildRequest(pieceBlock));
       pieces.addRequested(pieceBlock);

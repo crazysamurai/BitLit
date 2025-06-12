@@ -19,9 +19,14 @@ const state = {
   count: 0,
   diskUtilization: 0, //disk utilization in MB/s
   remainingTime: "∞",
+  elapsedTime: 0, // elapsed time
+  elapsedSeconds: 1, // elapsed time in seconds
+  lastDownloadedBytes: 0,
+  lastSpeedCheckTime: Date.now(),
 };
 
 const screen = blessed.screen({ smartCSR: true });
+screen.program.hideCursor();
 
 screen.title = "BitLit";
 
@@ -86,6 +91,7 @@ const updateUI = () => {
       File Size: ${state.size}\n
       Remaining Download: ${state.remaining}\n
       Estimated Time Left: ${state.remainingTime}\n
+      Elapsed Time: ${state.elapsedTime || "00:00"}\n
       Number of Peers: ${state.peers}\n
       Total Pieces: ${state.totalPieces}\n
       Missing Pieces: ${state.missingPieces}\n
@@ -104,6 +110,12 @@ const updateUI = () => {
   progressBar.setProgress(percent);
   screen.render();
 };
+
+//elapsed timer
+let elapsedTimer = setInterval(() => {
+  state.elapsedSeconds++;
+  updateElapsedTime();
+}, 1000);
 
 function updateError(newError) {
   contentBox.setContent(`{red-fg}{bold}Error: ${newError}{/bold}{/red-fg}`);
@@ -142,17 +154,16 @@ function updateUploadSpeed(newUploadSpeed) {
   updateUI();
 }
 
-function updateRemaining(downloadedLength) {
-  state.downloadedBytes += downloadedLength;
-  // log(`Downloaded bytes: ${state.downloadedBytes}`);
-  const remainingBytes = state.totalSizeInBytes - state.downloadedBytes;
-  // log(`Remaining bytes: ${remainingBytes}`);
-  state.remaining = formatSize(remainingBytes);
-  if (state.downloadedBytes >= state.totalSizeInBytes) {
-    state.missingPieces = 0;
-  } else {
-    state.missingPieces = Math.ceil(remainingBytes / pieceSize);
-  }
+function updateRemaining(count) {
+  let downloaded = state.totalSizeInBytes - count * pieceSize;
+  if (downloaded < 0) downloaded = 0; // Prevent negative
+  state.downloadedBytes = downloaded;
+  state.remaining = formatSize(state.totalSizeInBytes - downloaded);
+}
+
+function updateRemainingPieces(count) {
+  state.missingPieces = count;
+  updateRemaining(count);
   updateUI();
 }
 
@@ -192,6 +203,18 @@ function updateRemainingTime() {
   updateUI();
 }
 
+function updateElapsedTime() {
+  state.elapsedTime = formatTime(state.elapsedSeconds);
+  updateUI();
+}
+
+function stopElapsedTimer() {
+  if (elapsedTimer) {
+    clearInterval(elapsedTimer);
+    elapsedTimer = null;
+  }
+}
+
 function formatSize(newSize) {
   let totalSize;
   if (newSize < 2 ** 10) {
@@ -220,15 +243,11 @@ function formatTime(seconds) {
     .join(":");
 }
 
-function updateAverageDownloadSpeed(currentSpeed) {
-  state.count++;
-  if (state.count === 1) {
-    state.averageDownloadSpeed = currentSpeed;
-  } else {
-    state.averageDownloadSpeed =
-      (state.averageDownloadSpeed * (state.count - 1) + currentSpeed) /
-      state.count;
-  }
+function updateAverageDownloadSpeed() {
+  const avgSpeed =
+    state.elapsedSeconds > 0 ? state.downloadedBytes / state.elapsedSeconds : 0;
+  state.averageDownloadSpeed =
+    isFinite(avgSpeed) && avgSpeed >= 0 ? avgSpeed : 0;
   updateRemainingTime();
   updateUI();
 }
@@ -239,6 +258,7 @@ screen.append(logoBox);
 
 // Quit on Escape, q, or Control-C.
 screen.key(["escape", "q", "C-c"], function (ch, key) {
+  screen.program.showCursor();
   return process.exit(0);
 });
 
@@ -257,4 +277,6 @@ export {
   updateRemaining,
   updateDiskUtilization,
   updateAverageDownloadSpeed,
+  updateRemainingPieces,
+  stopElapsedTimer,
 };
