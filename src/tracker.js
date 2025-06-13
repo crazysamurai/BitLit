@@ -4,6 +4,8 @@ import * as torrentParser from "./torrent-parser.js";
 import { genId } from "./util.js";
 import { group } from "./groups.js";
 import { updateStatus } from "../screen/ui.js";
+import { log } from "./util.js";
+import { promises as dns } from "node:dns";
 
 //protocol to get the list of peers
 
@@ -16,6 +18,9 @@ export const getPeers = async (torrent, callback) => {
   let listLength = 0; //length of announce-list
   let flag = false; //flag to check if announce-list is present
 
+  let peerMap = new Map(); //to store unique peers
+  let trackerMap = new Map(); //to store resolve status of trackers
+
   if (torrent["announce-list"]) {
     flag = true;
     listLength = torrent["announce-list"].length;
@@ -23,49 +28,83 @@ export const getPeers = async (torrent, callback) => {
     listLength = 1;
   }
 
+  socket.on("message", (res, info) => {
+    log(`Got response from ${info.address}:${info.port}`);
+
+    const type = respType(res);
+
+    if (type === "connect") {
+      const connResp = parsedConnResp(res);
+      const key = info.address + ":" + info.port;
+      const resolve = trackerMap.get(key);
+
+      if (resolve) {
+        trackerMap.delete(key);
+        resolve({ connResp, info });
+      }
+    }
+
+    if (type === "announce") {
+      const announceResp = parsedAnnounceResp(res);
+      const trackerSource = `${info.address}:${info.port}`;
+
+      updateStatus(
+        `Tracker ${trackerSource} responded with ${announceResp.peers.length} peers`
+      );
+      log(
+        `Tracker ${trackerSource} gave ${
+          announceResp.peers.length
+        } peers:\n${JSON.stringify(announceResp.peers, null, 2)}`
+      );
+
+      announceResp.peers.forEach((peer) => {
+        if (peer?.ip && peer?.port) {
+          //check to avoid adding malformed peers
+          const key = `${peer.ip}:${peer.port}`;
+          peerMap.set(key, peer);
+        }
+      });
+    }
+  });
+
   for (let i = 0; i < listLength; i++) {
     try {
       if (flag) {
         rawUrl = new URL(
           new Buffer.from(torrent["announce-list"][i][0]).toString("utf-8")
         );
+        // log(`tracker ${i}: ${rawUrl}`);
       } else {
         rawUrl = new URL(new Buffer.from(torrent.announce).toString("utf-8"));
       }
+      log(`Trying tracker: ${rawUrl.href}`);
+
+      const { address: ip } = await dns.lookup(rawUrl.hostname);
+      const trackerKey = `${ip}:${rawUrl.port}`;
+      rawUrl.ip = ip; //add ip to rawUrl for later use
 
       const response = await new Promise((resolve, reject) => {
         let timeout;
 
-        //listen for response from tracker
-        socket.on("message", (res) => {
-          updateStatus(
-            "Connected to tracker: " +
-              rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)
-          );
-          clearTimeout(timeout); //clear timeout
-          resolve(res); //resolve with response
-        });
-
-        udpSend(socket, buildConnReq(), rawUrl); //send connection request to tracker
+        trackerMap.set(trackerKey, resolve);
+        udpSend(socket, buildConnReq(), rawUrl, () => {}); //send connection request to tracker
 
         timeout = setTimeout(() => {
+          trackerMap.delete(trackerKey);
           reject(new Error("No response from tracker"));
-        }, 5000);
+        }, 10000);
       });
 
-      if (respType(response) === "connect") {
-        const connResp = parsedConnResp(response);
-        const announceReq = buildAnnounceReq(connResp.connectionId, torrent);
-        udpSend(socket, announceReq, rawUrl);
+      const announceReq = buildAnnounceReq(
+        response.connResp.connectionId,
+        torrent
+      );
+      udpSend(socket, announceReq, rawUrl, () => {});
 
-        socket.on("message", (res) => {
-          if (respType(res) === "announce") {
-            const announceResp = parsedAnnounceResp(res);
-            callback(announceResp.peers);
-          }
-        });
-      }
-      break;
+      updateStatus(
+        "Connected to tracker: " +
+          rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)
+      );
     } catch (err) {
       updateStatus(
         err.message + ": " + rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)
@@ -73,15 +112,26 @@ export const getPeers = async (torrent, callback) => {
       continue;
     }
   }
+
+  // Wait a bit to allow announce responses to come in
+  await new Promise((res) => setTimeout(res, 8000));
+
+  log(
+    `values: ${JSON.stringify(Array.from(peerMap.values()), null, 2)}, size: ${
+      peerMap.size
+    }`
+  );
+  callback(Array.from(peerMap.values())); //convert map to array and return unique peers
 };
 
 function udpSend(socket, message, rawUrl, callback = () => {}) {
+  log(`Sending UDP packet to ${rawUrl.hostname}:${rawUrl.port}`);
   socket.send(
     message,
     0,
     message.length,
     rawUrl.port,
-    rawUrl.hostname,
+    rawUrl.ip || rawUrl.hostname,
     callback
   );
 }
@@ -199,7 +249,6 @@ function parsedAnnounceResp(res) {
   // 20 + 6 * n  32-bit integer  IP address
   // 24 + 6 * n  16-bit integer  TCP port
   // 20 + 6 * N
-
   const action = res.readUInt32BE(0);
   const transactionId = res.readUInt32BE(4);
   const leechers = res.readUInt32BE(8);

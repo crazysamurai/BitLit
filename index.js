@@ -15,8 +15,7 @@ const showErrorAndExit = (message) => {
   updateError(message + "\nExiting in 5 seconds...");
 };
 
-const input = "./torrents/linuxmint-22.1-cinnamon-64bit.iso.torrent";
-
+const input = "./torrents/CentOS Stream 8 Boot ISO.torrent";
 if (!input.endsWith(".torrent")) {
   showErrorAndExit("Please provide a valid torrent file");
   await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -35,6 +34,8 @@ try {
   process.exit(1);
 }
 
+//https://linuxtracker.org/
+//CentOS Stream 8 Boot ISO
 //"./torrents/linuxmint-22.1-cinnamon-64bit.iso.torrent"
 // "./torrents/Sniper Elite 5 [DODI Repack].torrent"
 // "./torrents/1torr.torrent"
