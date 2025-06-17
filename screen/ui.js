@@ -9,6 +9,8 @@ const state = {
   remaining: 0, //remaining size to download
   downloadedBytes: 0, // bytes downloaded so far
   peers: 0,
+  seeders: 0,
+  leechers: 0,
   totalPieces: 0,
   missingPieces: 0,
   availablePieces: 0,
@@ -140,7 +142,9 @@ const updateUI = () => {
       Remaining Download:       ${state.remaining}\n
       Estimated Time Left:      ${state.remainingTime}\n
       Elapsed Time:             ${state.elapsedTime || "00:00"}\n
-      Number of Peers:          ${state.peers}\n
+      Peers:                    ${state.peers}    Seeders: ${
+    state.seeders
+  }     Leechers:${state.leechers}\n
       Total Pieces:             ${state.totalPieces}\n
       Missing Pieces:           ${state.missingPieces}\n
       Network Activity:         ↑ ${(
@@ -165,6 +169,11 @@ function setTimer() {
     state.elapsedSeconds++;
     updateElapsedTime();
   }, 1000);
+}
+
+function updateSeedersLeechers(seeders, leechers) {
+  state.seeders = seeders;
+  state.leechers = leechers;
 }
 
 function updateError(newError) {
@@ -197,6 +206,7 @@ function updatePeers(newPeers) {
 }
 
 function updateDownloadSpeed(newDownloadSpeed) {
+  if (!Number.isFinite(newDownloadSpeed)) newDownloadSpeed = 0;
   state.downloadSpeed = newDownloadSpeed; //bytes per second
   if (newDownloadSpeed > 0) updateAverageDownloadSpeed(newDownloadSpeed);
   updateUI();
@@ -297,6 +307,7 @@ function formatTime(seconds) {
 }
 
 function updateAverageDownloadSpeed(currentSpeed) {
+  if (!Number.isFinite(currentSpeed)) return;
   state.avgSpeedCount++;
   state.totalSpeed += currentSpeed;
   state.averageDownloadSpeed = state.totalSpeed / state.avgSpeedCount;
@@ -305,6 +316,7 @@ function updateAverageDownloadSpeed(currentSpeed) {
 }
 
 function colorSpeed(speed) {
+  if (!Number.isFinite(speed)) speed = 0;
   // speed in B/s, convert to KB/s for thresholds
   const kbps = speed / 1024;
   if (kbps < 100) {
@@ -332,6 +344,7 @@ screen.key(["escape", "q", "C-c"], function (ch, key) {
 screen.render();
 
 export {
+  updateSeedersLeechers,
   updateDownloadSpeed,
   updateUploadSpeed,
   updateStatus,

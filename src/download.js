@@ -1,6 +1,7 @@
 import net from "node:net"; //for TCP connections
 import fs from "fs";
 import speedometer from "speedometer";
+import { fileTypeFromFile } from "file-type";
 import * as message from "./message.js";
 import Pieces from "./pieces.js";
 import Queue from "./queue.js";
@@ -18,23 +19,35 @@ import { log } from "./util.js";
 import { torrent } from "../index.js";
 import { BLOCK_LEN, blocksPerPiece, blockLen } from "./torrent-parser.js";
 
+let fileClosed = false;
+let pendingWrites = 0; //tracks how many asynchronous file write operations are currently in progress.
+
 const iteratePeers = (peers, torrent, path) => {
   updateStatus("Connecting with peers...");
   const pieces = new Pieces(torrent);
 
+  // Create a global queue for endgame mode
+  const queue = new Queue(torrent);
+
+  // Set up the endgame timer ONCE for all peers
+  setupEndgameTimer(peers, pieces, queue, torrent);
+
   const file = fs.openSync(path, "w");
   fs.ftruncateSync(file, Number(size(torrent).readBigUInt64BE()));
-  peers.forEach((peer) => download(peer, torrent, pieces, file));
+  peers.forEach((peer) => download(peer, torrent, pieces, file, peers, path));
 };
 
-const download = (peer, torrent, pieces, file) => {
+const download = (peer, torrent, pieces, file, peers, filePath) => {
   updateStatus("Trying to download from peers...");
   const socket = new net.Socket();
-  socket.on("error", () => {});
+  socket.on("error", (err) => {
+    log(`Socket error: ${err}`);
+  });
 
   socket.connect(peer.port, peer.ip, () => {
+    socket.peer = peer;
+    peer.socket = socket;
     socket.write(message.buildHandShake(torrent)); //send handshake message to peer
-    // console.log("connected to: " + peer.ip)
   });
 
   const queue = new Queue(torrent);
@@ -45,13 +58,22 @@ const download = (peer, torrent, pieces, file) => {
     }, 2000);
   }
 
-  onWholeMessage(socket, (msg) =>
-    msgHandler(msg, socket, pieces, queue, torrent, file)
+  onWholeMessage(peers, socket, (msg) =>
+    msgHandler(msg, socket, pieces, queue, torrent, file, peers, filePath)
   );
 };
 
+// Call this once after peers, pieces, queue, and torrent are initialized
+function setupEndgameTimer(peers, pieces, queue, torrent) {
+  setInterval(() => {
+    if (isEndgameMode(pieces)) {
+      endgameRequest(peers, pieces, queue, torrent);
+    }
+  }, 2000);
+}
+
 let lastSpeedUpdate = 0;
-const onWholeMessage = (socket, callback) => {
+const onWholeMessage = (peers, socket, callback) => {
   let savedBuf = Buffer.alloc(0);
   let handshake = true;
 
@@ -87,7 +109,16 @@ const onWholeMessage = (socket, callback) => {
   });
 };
 
-const msgHandler = (msg, socket, pieces, queue, torrent, file) => {
+const msgHandler = (
+  msg,
+  socket,
+  pieces,
+  queue,
+  torrent,
+  file,
+  peers,
+  filePath
+) => {
   if (isHandShake(msg)) socket.write(message.buildInterested());
   //checks if the message is a handshake response, and if so it sends the interested message and hopefully the peer will send an unchoke message.
   else {
@@ -97,7 +128,16 @@ const msgHandler = (msg, socket, pieces, queue, torrent, file) => {
     if (m.id === 4) haveHandler(socket, pieces, queue, m.payload);
     if (m.id === 5) bitfieldHandler(socket, pieces, queue, m.payload);
     if (m.id === 7)
-      pieceHandler(socket, pieces, queue, torrent, file, m.payload);
+      pieceHandler(
+        socket,
+        pieces,
+        queue,
+        torrent,
+        file,
+        filePath,
+        m.payload,
+        peers
+      );
   }
 };
 
@@ -139,56 +179,75 @@ const bitfieldHandler = (socket, pieces, queue, payload) => {
   });
   // Attach the bitfield to the socket (or peer) for later use
   socket.peerBitfield = bitfield;
-  // payload.forEach((byte, i) => {
-  //   for (let j = 0; j < 8; j++) {
-  //     if (byte % 2) queue.queue(i * 8 + 7 - j); // if LSB (we're reading the byte from R to L) is 1 i.e. peer has that piece then queue it for downloading by calculating its piece index
-  //     byte = Math.floor(byte / 2); //shift right by one bit
-  //   }
-  // });
+  if (socket.peer) {
+    socket.peer.peerBitfield = bitfield;
+  }
   if (queueEmpty) requestPiece(socket, pieces, queue);
 };
 
 let lastDiskUtilUpdate = 0;
-const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
-  // console.log('called pieceHandler');
+
+const pieceHandler = (
+  socket,
+  pieces,
+  queue,
+  torrent,
+  file,
+  filePath,
+  pieceResp,
+  peers
+) => {
+  if (fileClosed) return; // Ignore if file is already closed
+
   pieces.addReceived(pieceResp);
 
-  // updateRemaining(pieces.getDownloadedBytes(torrent));
   let remainingPieces = pieces.getMissingPieces();
   updateRemainingPieces(remainingPieces);
 
   const offset =
     pieceResp.index * torrent.info["piece length"] + pieceResp.begin;
 
-  const start = Date.now(); // Start time for speed calculation
+  pendingWrites++;
+  const start = Date.now();
   fs.write(file, pieceResp.block, 0, pieceResp.block.length, offset, () => {
-    const duration = Date.now() - start; // ms
-    const speed = pieceResp.block.length / (duration / 1000); // bytes/sec
+    pendingWrites--;
+    const duration = Date.now() - start;
+    const speed = pieceResp.block.length / (duration / 1000);
     const now = Date.now();
     if (now - lastDiskUtilUpdate >= 2000) {
       updateDiskUtilization((speed / 2 ** 20).toFixed(2));
       lastDiskUtilUpdate = now;
     }
+
+    // Only close file when all pieces are done and all writes are finished
+    if (pieces.isDone() && pendingWrites === 0 && !fileClosed) {
+      try {
+        fs.closeSync(file);
+        fileClosed = true;
+        updateStatus(`{green-fg}Finished Writing{/green-fg}`);
+
+        fileTypeFromFile(filePath).then((fileType) => {
+          if (fileType && fileType.ext) {
+            const newPath = `${filePath}.${fileType.ext}`;
+            fs.renameSync(filePath, newPath);
+            updateStatus(`{green-fg}Download Complete!{/green-fg}`);
+          }
+        });
+      } catch (err) {
+        updateError(`{red-fg}Error writing file: ${err} {/red-fg}`);
+      }
+      updateAverageDownloadSpeed();
+      updateRemainingPieces(0);
+      updateDiskUtilization(0);
+      stopElapsedTimer();
+      if (pieces.expireTimer) {
+        clearInterval(pieces.expireTimer);
+        pieces.expireTimer = null;
+      }
+    }
   });
 
-  if (pieces.isDone()) {
-    socket.end();
-    updateStatus("Finished downloading");
-    try {
-      fs.closeSync(file);
-      updateStatus("Finished Writing");
-    } catch (err) {
-      updateError("Error writing file: " + err);
-    }
-    updateAverageDownloadSpeed();
-    updateRemainingPieces(0);
-    updateDiskUtilization(0);
-    stopElapsedTimer();
-    if (pieces.expireTimer) {
-      clearInterval(pieces.expireTimer);
-      pieces.expireTimer = null;
-    }
-  } else {
+  if (!pieces.isDone()) {
     requestPiece(socket, pieces, queue);
   }
 };
@@ -220,25 +279,8 @@ const isHandShake = (msg) => {
   );
 };
 
-// function refillQueueForPeer(queue, pieces, peerBitfield, torrent) {
-//   const missingBlocks = pieces.getMissingBlocksForPeer(peerBitfield);
-//   for (const { pieceIndex, blockIndex } of missingBlocks) {
-//     // Build a pieceBlock object as expected by your queue/request logic
-//     const blocksPerPiece = torrent.info["piece length"] / BLOCK_LEN; // or use your actual block count logic
-//     const pieceBlock = {
-//       index: pieceIndex,
-//       begin: blockIndex * BLOCK_LEN,
-//       length: BLOCK_LEN,
-//     };
-//     if (pieces.needed(pieceBlock)) {
-//       queue.queue(pieceIndex); // or queue.queue(pieceBlock) if your queue supports blocks
-//     }
-//   }
-// }
-
 function refillQueueForPeer(queue, pieces, peerBitfield, torrent) {
-  log(`refill called`);
-  const missingBlocks = pieces.getMissingBlocksForPeer(peerBitfield);
+  const missingBlocks = pieces.listMissingBlocksForPeer(peerBitfield);
   for (const { pieceIndex, blockIndex } of missingBlocks) {
     const pieceBlock = {
       index: pieceIndex,
@@ -247,6 +289,50 @@ function refillQueueForPeer(queue, pieces, peerBitfield, torrent) {
     };
     if (pieces.needed(pieceBlock)) {
       queue.queueBlock(pieceBlock);
+    }
+  }
+}
+
+function isEndgameMode(pieces) {
+  const missingPieces = pieces.listMissingPieces();
+  if (missingPieces.length === 0) return false; // Defensive: no missing pieces
+  if (missingPieces.length > 10) return false;
+  log("endgamemode called");
+  const lastPieceIndex = missingPieces[missingPieces.length - 1];
+  if (lastPieceIndex === undefined) return false; // Defensive: invalid index
+  const missingBlocks = pieces.listMissingBlocksForPiece(lastPieceIndex);
+  return missingBlocks.length > 0;
+}
+
+function endgameRequest(peers, pieces, queue, torrent) {
+  const missingPieces = pieces.listMissingPieces();
+  if (missingPieces.length > 10) return;
+
+  for (const pieceIndex of missingPieces) {
+    log(`Endgame mode: requesting missing blocks for piece ${pieceIndex}`);
+    const missingBlocks = pieces.listMissingBlocksForPiece(pieceIndex);
+
+    for (const block of missingBlocks) {
+      for (const peer of peers) {
+        if (
+          peer.peerBitfield &&
+          peer.peerBitfield[pieceIndex] === 1 &&
+          peer.socket &&
+          !peer.socket.destroyed
+        ) {
+          const pieceBlock = {
+            index: pieceIndex,
+            begin: block * BLOCK_LEN,
+            length: blockLen(torrent, pieceIndex, block),
+          };
+          // Send request directly to this peer's socket
+          peer.socket.write(message.buildRequest(pieceBlock));
+          pieces.addRequested(pieceBlock);
+          log(
+            `Sent endgame request for block ${pieceIndex}:${block} to peer ${peer.ip}:${peer.port}`
+          );
+        }
+      }
     }
   }
 }

@@ -55,6 +55,28 @@ class Pieces {
     return this.#received.filter((blocks) => !blocks.every(Boolean)).length;
   }
 
+  listMissingPieces() {
+    const missing = [];
+    for (let i = 0; i < this.#received.length; i++) {
+      if (!this.#received[i].every(Boolean)) {
+        missing.push(i);
+      }
+    }
+    return missing;
+  }
+
+  listMissingBlocksForPiece(pieceIndex) {
+    const blocks = this.#received[pieceIndex];
+    if (!blocks) return []; // Defensive: return empty if pieceIndex is invalid
+    const missingBlocks = [];
+    for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+      if (!blocks[blockIndex]) {
+        missingBlocks.push(blockIndex);
+      }
+    }
+    return missingBlocks;
+  }
+
   expireOldRequests() {
     const now = Date.now();
     for (const key in this.requestTimestamps) {
@@ -78,7 +100,7 @@ class Pieces {
     return true;
   }
 
-  getMissingBlocksForPeer(peerBitfield) {
+  listMissingBlocksForPeer(peerBitfield) {
     const missingBlocks = [];
     for (let pieceIndex = 0; pieceIndex < this.#received.length; pieceIndex++) {
       if (peerBitfield && peerBitfield[pieceIndex]) {

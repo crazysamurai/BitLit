@@ -34,12 +34,24 @@ class Queue {
     }
   }
 
-  queueBlock(pieceBlock) {
+  // queueBlock(pieceBlock) {
+  //   const key = `${pieceBlock.index}:${pieceBlock.begin}`;
+  //   if (!this.#queuedBlocks.has(key)) {
+  //     if (this.#queue.length < 10000) {
+  //       this.#queue.push(pieceBlock);
+  //       this.#queuedBlocks.add(key);
+  //     }
+  //   }
+  // }
+
+  queueBlock(pieceBlock, allowDuplicate = false) {
     const key = `${pieceBlock.index}:${pieceBlock.begin}`;
-    if (!this.#queuedBlocks.has(key)) {
+    if (allowDuplicate || !this.#queuedBlocks.has(key)) {
       if (this.#queue.length < 10000) {
         this.#queue.push(pieceBlock);
-        this.#queuedBlocks.add(key);
+        if (!allowDuplicate) {
+          this.#queuedBlocks.add(key);
+        }
       }
     }
   }

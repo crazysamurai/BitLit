@@ -6,10 +6,8 @@ import { group } from "./groups.js";
 import { updateStatus } from "../screen/ui.js";
 import { log } from "./util.js";
 import { promises as dns } from "node:dns";
+import { updateSeedersLeechers } from "../screen/ui.js";
 
-//protocol to get the list of peers
-
-//remember to update the function to select the tracker with most peers
 export const getPeers = async (torrent, callback) => {
   updateStatus("Looking for trackers...");
   const socket = dgram.createSocket("udp4");
@@ -253,8 +251,8 @@ function parsedAnnounceResp(res) {
   // 20 + 6 * N
   const action = res.readUInt32BE(0);
   const transactionId = res.readUInt32BE(4);
-  const leechers = res.readUInt32BE(8);
-  const seeders = res.readUInt32BE(12);
+  const leechers = res.readUInt32BE(12);
+  const seeders = res.readUInt32BE(16);
   const peers = group(res.slice(20), 6).map((address) => {
     //The addresses come in groups of 6 bytes, the first 4 represent the IP address and the next 2 represent the port
     return {
@@ -262,5 +260,6 @@ function parsedAnnounceResp(res) {
       port: address.readUInt16BE(4),
     };
   });
+  updateSeedersLeechers(seeders, leechers);
   return { action, transactionId, leechers, seeders, peers };
 }

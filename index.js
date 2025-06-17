@@ -35,8 +35,7 @@ const checkInternetConnection = () => {
   });
 };
 
-const input =
-  "./torrents/kali-linux-2025.2-cloud-genericcloud-arm64-tar-xz.torrent";
+const input = "./torrents/vice.torrent";
 let torrent;
 let pieceSize;
 
