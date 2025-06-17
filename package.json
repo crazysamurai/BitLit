@@ -12,6 +12,7 @@
   "dependencies": {
     "bencode": "^4.0.0",
     "blessed": "^0.1.81",
+    "file-type": "^21.0.0",
     "speedometer": "^1.1.0"
   }
 }

@@ -73,9 +73,11 @@ export const getPeers = async (torrent, callback) => {
         rawUrl = new URL(
           new Buffer.from(torrent["announce-list"][i][0]).toString("utf-8")
         );
+        if (!rawUrl.port) rawUrl.port = "6969";
         // log(`tracker ${i}: ${rawUrl}`);
       } else {
         rawUrl = new URL(new Buffer.from(torrent.announce).toString("utf-8"));
+        if (!rawUrl.port) rawUrl.port = "6969";
       }
       log(`Trying tracker: ${rawUrl.href}`);
 
@@ -92,7 +94,7 @@ export const getPeers = async (torrent, callback) => {
         timeout = setTimeout(() => {
           trackerMap.delete(trackerKey);
           reject(new Error("No response from tracker"));
-        }, 10000);
+        }, 2000);
       });
 
       const announceReq = buildAnnounceReq(
@@ -114,7 +116,7 @@ export const getPeers = async (torrent, callback) => {
   }
 
   // Wait a bit to allow announce responses to come in
-  await new Promise((res) => setTimeout(res, 8000));
+  await new Promise((res) => setTimeout(res, 2000));
 
   log(
     `values: ${JSON.stringify(Array.from(peerMap.values()), null, 2)}, size: ${

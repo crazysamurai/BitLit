@@ -16,7 +16,9 @@ const state = {
   downloadSpeed: 0, //current download speed in B/s
   uploadSpeed: 0, //current upload speed in B/s
   averageDownloadSpeed: 0, //average download speed in B/s
+  totalSpeed: 0,
   count: 0,
+  avgSpeedCount: 0,
   diskUtilization: 0, //disk utilization in MB/s
   remainingTime: "∞",
   elapsedTime: 0, // elapsed time
@@ -25,10 +27,26 @@ const state = {
   lastSpeedCheckTime: Date.now(),
 };
 
-const screen = blessed.screen({ smartCSR: true });
+let hasError = false;
+
+const screen = blessed.screen({
+  smartCSR: true,
+  style: { bg: "black" },
+});
+
 screen.program.hideCursor();
 
 screen.title = "BitLit";
+
+const background = blessed.box({
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
+  style: {
+    bg: "black",
+  },
+});
 
 const logoBox = blessed.text({
   parent: screen,
@@ -38,86 +56,119 @@ const logoBox = blessed.text({
   align: "center",
   top: 0,
   content: `
-    ____     _    __     __     _    __ 
-   / __ )   (_)  / /_   / /    (_)  / /_
-  / __  |  / /  / __/  / /    / /  / __/
- / /_/ /  / /  / /_   / /___ / /  / /_  
-/_____/  /_/   \\__/  /_____//_/   \\__/                                         
-`,
+┳┓• ┓ • 
+┣┫┓╋┃ ┓╋
+┻┛┗┗┗┛┗┗        
+  `,
   style: {
-    fg: "green",
+    fg: "cyan",
+    bg: "black",
+  },
+});
+
+const progressContainer = blessed.box({
+  parent: screen,
+  width: "80%",
+  height: 3,
+  left: "center",
+  top: "100%-5",
+  style: {
     bg: "black",
   },
 });
 
 const progressBar = blessed.progressbar({
-  parent: screen,
-  width: "75%",
+  parent: progressContainer,
+  width: "100%",
   height: 3,
   left: "center",
-  top: "100%-4",
+  top: "100%-2",
   orientation: "horizontal",
-  style: {
-    fg: "white",
-    bg: "black",
-    bar: {
-      bg: "green",
-      fg: "green",
-    },
-    border: { fg: "white" },
-  },
+  ch: "░",
   border: "line",
   filled: 0,
   label: "Download Progress",
+  style: {
+    fg: "cyan",
+    bg: "black",
+    bar: {
+      bg: "cyan",
+      fg: "black",
+    },
+    border: { fg: "white", bg: "black" },
+    label: { fg: "white", bg: "black" },
+  },
+});
+
+const percentText = blessed.text({
+  parent: progressContainer,
+  width: "shrink",
+  height: 1,
+  top: "100%-1",
+  left: "center",
+  align: "center",
+  content: "0%",
+  style: {
+    fg: "white",
+    bg: "black",
+  },
 });
 
 const contentBox = blessed.box({
   parent: screen,
-  top: 7,
+  top: 5,
   left: "center",
   width: "80%",
-  height: "100%-10",
+  height: "100%-7",
   tags: true,
   style: {
     fg: "white",
     bg: "black",
+    content: {
+      left: "center",
+      align: "center",
+    },
   },
 });
 
 const updateUI = () => {
+  if (hasError) return;
   contentBox.setContent(`
-      Torrent Name: ${state.torrentName}\n
-      Status: ${state.status}\n
-      File Size: ${state.size}\n
-      Remaining Download: ${state.remaining}\n
-      Estimated Time Left: ${state.remainingTime}\n
-      Elapsed Time: ${state.elapsedTime || "00:00"}\n
-      Number of Peers: ${state.peers}\n
-      Total Pieces: ${state.totalPieces}\n
-      Missing Pieces: ${state.missingPieces}\n
-      Network Activity: ↑ ${((state.uploadSpeed * 8) / 1_000_000).toFixed(
-        2
-      )} Mb/s    ↓ ${((state.downloadSpeed * 8) / 1_000_000).toFixed(2)} Mb/s\n
-      Average Download Speed: ${(
-        (state.averageDownloadSpeed * 8) /
+      Torrent Name:             ${state.torrentName}\n
+      Status:                   ${state.status}\n
+      File Size:                ${state.size}\n
+      Remaining Download:       ${state.remaining}\n
+      Estimated Time Left:      ${state.remainingTime}\n
+      Elapsed Time:             ${state.elapsedTime || "00:00"}\n
+      Number of Peers:          ${state.peers}\n
+      Total Pieces:             ${state.totalPieces}\n
+      Missing Pieces:           ${state.missingPieces}\n
+      Network Activity:         ↑ ${(
+        (state.uploadSpeed * 8) /
         1_000_000
-      ).toFixed(2)} Mb/s\n
-      Disk Utilization: ${state.diskUtilization} MB/s\n
+      ).toFixed(2)} Mb/s    ↓ ${colorSpeed(state.downloadSpeed)}\n
+      Average Download Speed:   ${colorSpeed(state.averageDownloadSpeed)}\n
+      Disk Utilization:         ${state.diskUtilization} MB/s\n
     `);
   const percent = state.totalSizeInBytes
     ? Math.min(100, (state.downloadedBytes / state.totalSizeInBytes) * 100)
     : 0;
   progressBar.setProgress(percent);
+  percentText.setContent(`${Math.floor(percent)}%`);
   screen.render();
 };
 
 //elapsed timer
-let elapsedTimer = setInterval(() => {
-  state.elapsedSeconds++;
-  updateElapsedTime();
-}, 1000);
+let elapsedTimer;
+function setTimer() {
+  elapsedTimer = setInterval(() => {
+    state.elapsedSeconds++;
+    updateElapsedTime();
+  }, 1000);
+}
 
 function updateError(newError) {
+  hasError = true;
   contentBox.setContent(`{red-fg}{bold}Error: ${newError}{/bold}{/red-fg}`);
   screen.render();
 }
@@ -141,11 +192,13 @@ function updateSize(newSize) {
 
 function updatePeers(newPeers) {
   state.peers = newPeers;
+  setTimer();
   updateUI();
 }
 
 function updateDownloadSpeed(newDownloadSpeed) {
   state.downloadSpeed = newDownloadSpeed; //bytes per second
+  if (newDownloadSpeed > 0) updateAverageDownloadSpeed(newDownloadSpeed);
   updateUI();
 }
 
@@ -243,18 +296,32 @@ function formatTime(seconds) {
     .join(":");
 }
 
-function updateAverageDownloadSpeed() {
-  const avgSpeed =
-    state.elapsedSeconds > 0 ? state.downloadedBytes / state.elapsedSeconds : 0;
-  state.averageDownloadSpeed =
-    isFinite(avgSpeed) && avgSpeed >= 0 ? avgSpeed : 0;
+function updateAverageDownloadSpeed(currentSpeed) {
+  state.avgSpeedCount++;
+  state.totalSpeed += currentSpeed;
+  state.averageDownloadSpeed = state.totalSpeed / state.avgSpeedCount;
   updateRemainingTime();
   updateUI();
 }
 
-screen.append(contentBox);
-screen.append(progressBar);
+function colorSpeed(speed) {
+  // speed in B/s, convert to KB/s for thresholds
+  const kbps = speed / 1024;
+  if (kbps < 100) {
+    return `{red-fg}${((speed * 8) / 1_000_000).toFixed(2)} Mb/s{/red-fg}`;
+  } else if (kbps < 1000) {
+    return `{yellow-fg}${((speed * 8) / 1_000_000).toFixed(
+      2
+    )} Mb/s{/yellow-fg}`;
+  } else {
+    return `{green-fg}${((speed * 8) / 1_000_000).toFixed(2)} Mb/s{/green-fg}`;
+  }
+}
+
+screen.append(background);
 screen.append(logoBox);
+screen.append(contentBox);
+screen.append(progressContainer);
 
 // Quit on Escape, q, or Control-C.
 screen.key(["escape", "q", "C-c"], function (ch, key) {

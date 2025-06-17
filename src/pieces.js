@@ -24,7 +24,9 @@ class Pieces {
   addRequested(pieceBlock) {
     const blockIndex = pieceBlock.begin / BLOCK_LEN;
     this.#requested[pieceBlock.index][blockIndex] = true;
-    this.requestTimestamps[`${pieceBlock.index}:${pieceBlock.begin / BLOCK_LEN}`] = Date.now();
+    this.requestTimestamps[
+      `${pieceBlock.index}:${pieceBlock.begin / BLOCK_LEN}`
+    ] = Date.now();
   }
 
   addReceived(pieceBlock) {
@@ -35,7 +37,9 @@ class Pieces {
     );
 
     this.#received[pieceBlock.index][blockIndex] = true;
-    delete this.requestTimestamps[`${pieceBlock.index}:${pieceBlock.begin / BLOCK_LEN}`];
+    delete this.requestTimestamps[
+      `${pieceBlock.index}:${pieceBlock.begin / BLOCK_LEN}`
+    ];
   }
 
   needed(pieceBlock) {
@@ -56,7 +60,7 @@ class Pieces {
     for (const key in this.requestTimestamps) {
       if (now - this.requestTimestamps[key] > this.REQUEST_TIMEOUT) {
         // Parse key
-        const [pieceIndex, blockIndex] = key.split(':').map(Number);
+        const [pieceIndex, blockIndex] = key.split(":").map(Number);
         // Mark as not requested
         this.#requested[pieceIndex][blockIndex] = false;
         delete this.requestTimestamps[key];
@@ -72,6 +76,21 @@ class Pieces {
       }
     }
     return true;
+  }
+
+  getMissingBlocksForPeer(peerBitfield) {
+    const missingBlocks = [];
+    for (let pieceIndex = 0; pieceIndex < this.#received.length; pieceIndex++) {
+      if (peerBitfield && peerBitfield[pieceIndex]) {
+        const blocks = this.#received[pieceIndex];
+        for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+          if (!blocks[blockIndex]) {
+            missingBlocks.push({ pieceIndex, blockIndex });
+          }
+        }
+      }
+    }
+    return missingBlocks;
   }
 }
 export default Pieces;

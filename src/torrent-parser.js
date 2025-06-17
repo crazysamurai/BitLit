@@ -31,37 +31,20 @@ const size = (torrent) => {
   return buf;
 };
 
-const BLOCK_LEN = Math.pow(2,14)
+const BLOCK_LEN = Math.pow(2, 14);
 
-// const pieceLen = (torrent, pieceIndex) => {
-//   const totalLength = Number(size(torrent).readBigUInt64BE());
-//   const pieceLength = torrent.info['piece length'];
-//   const lastPieceLength = totalLength % pieceLength;
-//   const lastPieceIndex = Math.floor(totalLength/pieceLength);
-//   return lastPieceIndex === pieceIndex ? lastPieceIndex : lastPieceLength;
-// }
-
-const blocksPerPiece = (torrent, pieceIndex)=>{
+const blocksPerPiece = (torrent, pieceIndex) => {
   const pieceLength = pieceLen(torrent, pieceIndex);
   return Math.ceil(pieceLength / BLOCK_LEN);
-}
-
-// const blockLen = (torrent, pieceIndex, blockIndex)=>{
-//   const pieceLength = pieceLen(torrent, pieceIndex);
-
-//   const lastPieceLength = pieceLength % BLOCK_LEN;
-//   const lastPieceIndex = Math.floor(pieceLength / BLOCK_LEN);
-
-//   return blockIndex === lastPieceIndex ? lastPieceLength : BLOCK_LEN;
-// }
+};
 
 const pieceLen = (torrent, pieceIndex) => {
   const totalLength = Number(size(torrent).readBigUInt64BE());
-  const pieceLength = torrent.info['piece length'];
+  const pieceLength = torrent.info["piece length"];
   const lastPieceIndex = Math.floor((totalLength - 1) / pieceLength);
   if (pieceIndex === lastPieceIndex) {
     // For the last piece, return the remaining bytes
-    return totalLength - (pieceLength * lastPieceIndex);
+    return totalLength - pieceLength * lastPieceIndex;
   } else {
     // For all other pieces, return the standard piece length
     return pieceLength;
@@ -73,7 +56,7 @@ const blockLen = (torrent, pieceIndex, blockIndex) => {
   const numBlocks = Math.ceil(pieceLength / BLOCK_LEN);
   // For the last block, return the remainder, otherwise BLOCK_LEN
   if (blockIndex === numBlocks - 1) {
-    return pieceLength - (BLOCK_LEN * (numBlocks - 1));
+    return pieceLength - BLOCK_LEN * (numBlocks - 1);
   } else {
     return BLOCK_LEN;
   }

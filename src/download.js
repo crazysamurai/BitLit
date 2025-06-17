@@ -13,14 +13,17 @@ import {
   stopElapsedTimer,
   updateError,
 } from "../screen/ui.js";
-
+import { size } from "./torrent-parser.js";
 import { log } from "./util.js";
+import { torrent } from "../index.js";
+import { BLOCK_LEN, blocksPerPiece, blockLen } from "./torrent-parser.js";
 
 const iteratePeers = (peers, torrent, path) => {
   updateStatus("Connecting with peers...");
   const pieces = new Pieces(torrent);
 
   const file = fs.openSync(path, "w");
+  fs.ftruncateSync(file, Number(size(torrent).readBigUInt64BE()));
   peers.forEach((peer) => download(peer, torrent, pieces, file));
 };
 
@@ -72,7 +75,7 @@ const onWholeMessage = (socket, callback) => {
     const now = Date.now();
     if (now - lastSpeedUpdate >= UPDATE_INTERVAL) {
       updateDownloadSpeed(currentSpeed);
-      updateAverageDownloadSpeed();
+      // updateAverageDownloadSpeed();
       lastSpeedUpdate = now;
     }
 
@@ -110,19 +113,38 @@ const unchokeHandler = (socket, pieces, queue) => {
 const haveHandler = (socket, pieces, queue, payload) => {
   const pieceIndex = payload.readUInt32BE(0);
   const queueEmpty = queue.length === 0;
-  queue.queue(pieceIndex);
+  // queue.queue(pieceIndex);
+  const nBlocks = blocksPerPiece(torrent, pieceIndex);
+  for (let i = 0; i < nBlocks; i++) {
+    const pieceBlock = {
+      index: pieceIndex,
+      begin: i * BLOCK_LEN,
+      length: blockLen(torrent, pieceIndex, i),
+    };
+    if (pieces.needed(pieceBlock)) {
+      queue.queueBlock(pieceBlock);
+    }
+  }
   if (queueEmpty) requestPiece(socket, pieces, queue);
 };
 
 const bitfieldHandler = (socket, pieces, queue, payload) => {
   //The payload here is a buffer, which you can think of as a long string of bits. If the peer has the index-0 piece, then the first bit will be a 1. If not it will be 0. If they have the index-1 piece, then the next bit will be 1, 0 if not. And so on. So we need a way to read individual bits out of the buffer.
+  const bitfield = [];
   const queueEmpty = queue.length === 0;
-  payload.forEach((byte, i) => {
+  payload.forEach((byte) => {
     for (let j = 0; j < 8; j++) {
-      if (byte % 2) queue.queue(i * 8 + 7 - j); // if LSB (we're reading the byte from R to L) is 1 i.e. peer has that piece then queue it for downloading by calculating its piece index
-      byte = Math.floor(byte / 2); //shift right by one bit
+      bitfield.push((byte >> (7 - j)) & 1);
     }
   });
+  // Attach the bitfield to the socket (or peer) for later use
+  socket.peerBitfield = bitfield;
+  // payload.forEach((byte, i) => {
+  //   for (let j = 0; j < 8; j++) {
+  //     if (byte % 2) queue.queue(i * 8 + 7 - j); // if LSB (we're reading the byte from R to L) is 1 i.e. peer has that piece then queue it for downloading by calculating its piece index
+  //     byte = Math.floor(byte / 2); //shift right by one bit
+  //   }
+  // });
   if (queueEmpty) requestPiece(socket, pieces, queue);
 };
 
@@ -132,7 +154,8 @@ const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
   pieces.addReceived(pieceResp);
 
   // updateRemaining(pieces.getDownloadedBytes(torrent));
-  updateRemainingPieces(pieces.getMissingPieces());
+  let remainingPieces = pieces.getMissingPieces();
+  updateRemainingPieces(remainingPieces);
 
   const offset =
     pieceResp.index * torrent.info["piece length"] + pieceResp.begin;
@@ -142,7 +165,7 @@ const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
     const duration = Date.now() - start; // ms
     const speed = pieceResp.block.length / (duration / 1000); // bytes/sec
     const now = Date.now();
-    if (now - lastDiskUtilUpdate >= 3000) {
+    if (now - lastDiskUtilUpdate >= 2000) {
       updateDiskUtilization((speed / 2 ** 20).toFixed(2));
       lastDiskUtilUpdate = now;
     }
@@ -173,7 +196,13 @@ const pieceHandler = (socket, pieces, queue, torrent, file, pieceResp) => {
 const requestPiece = (socket, pieces, queue) => {
   if (queue.choked) return null;
   log(`queue length: ${queue.length()}`);
+
   if (socket.destroyed || !socket.writable) return null;
+
+  if (queue.length() === 0 && !pieces.isDone()) {
+    refillQueueForPeer(queue, pieces, socket.peerBitfield, torrent);
+  }
+
   while (queue.length()) {
     const pieceBlock = queue.dequeue();
     if (pieces.needed(pieceBlock)) {
@@ -190,5 +219,36 @@ const isHandShake = (msg) => {
     msg.toString("utf-8", 1, 1 + msg.readUInt8(0)) === "BitTorrent protocol"
   );
 };
+
+// function refillQueueForPeer(queue, pieces, peerBitfield, torrent) {
+//   const missingBlocks = pieces.getMissingBlocksForPeer(peerBitfield);
+//   for (const { pieceIndex, blockIndex } of missingBlocks) {
+//     // Build a pieceBlock object as expected by your queue/request logic
+//     const blocksPerPiece = torrent.info["piece length"] / BLOCK_LEN; // or use your actual block count logic
+//     const pieceBlock = {
+//       index: pieceIndex,
+//       begin: blockIndex * BLOCK_LEN,
+//       length: BLOCK_LEN,
+//     };
+//     if (pieces.needed(pieceBlock)) {
+//       queue.queue(pieceIndex); // or queue.queue(pieceBlock) if your queue supports blocks
+//     }
+//   }
+// }
+
+function refillQueueForPeer(queue, pieces, peerBitfield, torrent) {
+  log(`refill called`);
+  const missingBlocks = pieces.getMissingBlocksForPeer(peerBitfield);
+  for (const { pieceIndex, blockIndex } of missingBlocks) {
+    const pieceBlock = {
+      index: pieceIndex,
+      begin: blockIndex * BLOCK_LEN,
+      length: BLOCK_LEN,
+    };
+    if (pieces.needed(pieceBlock)) {
+      queue.queueBlock(pieceBlock);
+    }
+  }
+}
 
 export { download, iteratePeers };
