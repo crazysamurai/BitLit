@@ -46,9 +46,6 @@ export const getPeers = async (torrent, callback) => {
       const announceResp = parsedAnnounceResp(res);
       const trackerSource = `${info.address}:${info.port}`;
 
-      updateStatus(
-        `Tracker ${trackerSource} responded with ${announceResp.peers.length} peers`
-      );
       log(
         `Tracker ${trackerSource} gave ${
           announceResp.peers.length
@@ -101,14 +98,12 @@ export const getPeers = async (torrent, callback) => {
       );
       udpSend(socket, announceReq, rawUrl, () => {});
 
-      updateStatus(
-        "Connected to tracker: " +
-          rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)
+      log(
+        `Connected to tracker: 
+          ${rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)}`
       );
     } catch (err) {
-      updateStatus(
-        err.message + ": " + rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)
-      );
+      log(`err.message: ${rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)}`);
       continue;
     }
   }

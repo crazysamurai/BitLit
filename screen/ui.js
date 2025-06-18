@@ -1,6 +1,7 @@
 import blessed from "blessed";
+import contrib from "blessed-contrib";
 import { pieceSize } from "../index.js";
-import { log } from "../src/util.js";
+import { togglePause } from "../src/download.js";
 
 const state = {
   torrentName: "Getting torrent info...",
@@ -73,7 +74,7 @@ const progressContainer = blessed.box({
   width: "80%",
   height: 3,
   left: "center",
-  top: "100%-5",
+  top: "100%-7",
   style: {
     bg: "black",
   },
@@ -116,6 +117,36 @@ const percentText = blessed.text({
   },
 });
 
+const helpContainer = blessed.box({
+  parent: screen,
+  width: "80%",
+  height: 1,
+  top:"100%-2",
+  left: "center",
+  align: "center",
+  content: "Press 'p' to pause/resume, 'q' to quit",
+  style: {
+    fg: "white",
+    bg: "black",
+  },
+});
+
+const peerTable = contrib.table({
+  parent:screen,
+  interactive: true,
+  top:"100%-15",
+  left:"center",
+  width: "80%",
+  height:8,
+  border:{type:"line"},
+  columnSpacing:2,
+  columnWidth:[30,8,20,10],
+  style:{
+    header: { fg: 'cyan' },
+    cell: { fg: 'white' }
+  }
+})
+
 const contentBox = blessed.box({
   parent: screen,
   top: 5,
@@ -142,9 +173,9 @@ const updateUI = () => {
       Remaining Download:       ${state.remaining}\n
       Estimated Time Left:      ${state.remainingTime}\n
       Elapsed Time:             ${state.elapsedTime || "00:00"}\n
-      Peers:                    ${state.peers}    Seeders: ${
+      Peers:                    ${state.peers} ( Seeders: ${
     state.seeders
-  }     Leechers:${state.leechers}\n
+  }  Leechers: ${state.leechers} )\n
       Total Pieces:             ${state.totalPieces}\n
       Missing Pieces:           ${state.missingPieces}\n
       Network Activity:         ↑ ${(
@@ -333,16 +364,34 @@ function colorSpeed(speed) {
 screen.append(background);
 screen.append(logoBox);
 screen.append(contentBox);
+// screen.append(peerTable)
 screen.append(progressContainer);
+screen.append(helpContainer);
+
 
 // Quit on Escape, q, or Control-C.
 screen.key(["escape", "q", "C-c"], function (ch, key) {
   screen.program.showCursor();
   return process.exit(0);
 });
+screen.key(['up', 'down', 'pageup', 'pagedown'], function() {
+  // This handler is just to ensure keys are registered.
+});
+screen.key("p", function (ch, key) {
+  togglePause();
+});
+
+// screen.key('tab', () => {
+//   peerTable.focus();
+//   screen.render();
+// });
+
+// screen.key('escape', () => {
+//   screen.focusPop();
+//   screen.render();
+// });
 
 screen.render();
-
 export {
   updateSeedersLeechers,
   updateDownloadSpeed,
@@ -359,4 +408,5 @@ export {
   updateAverageDownloadSpeed,
   updateRemainingPieces,
   stopElapsedTimer,
+  peerTable
 };

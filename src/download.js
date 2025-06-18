@@ -13,35 +13,80 @@ import {
   updateRemainingPieces,
   stopElapsedTimer,
   updateError,
+  peerTable
 } from "../screen/ui.js";
 import { size } from "./torrent-parser.js";
 import { log } from "./util.js";
 import { torrent } from "../index.js";
 import { BLOCK_LEN, blocksPerPiece, blockLen } from "./torrent-parser.js";
+import { getPeers } from "./tracker.js";
+
+let pieces = null;
+let queue = null;
+let file = null;
+let torrentInfo = null;
+let filePath = null;
+let downloadComplete = false;
+// let peerInfos = [];
+
+let activeSockets = []
+let isPaused = false;
+
+const togglePause = () => {
+  if(downloadComplete) return;
+  isPaused = !isPaused;
+  log(`isPaused: ${isPaused}`);
+  updateStatus(isPaused ? `{yellow-fg}Paused{/yellow-fg}` : `{cyan-fg}Downloading...{/cyan-fg}`);
+  if (isPaused) {
+    for (const socket of activeSockets) {
+      if (socket && !socket.destroyed) socket.destroy(); //close all sockets
+    }
+  }else{
+    getPeers(torrentInfo, (peers) => {
+      iteratePeers(peers, torrentInfo, filePath);
+    });
+  }
+}
 
 let fileClosed = false;
 let pendingWrites = 0; //tracks how many asynchronous file write operations are currently in progress.
 
 const iteratePeers = (peers, torrent, path) => {
-  updateStatus("Connecting with peers...");
-  const pieces = new Pieces(torrent);
-
-  // Create a global queue for endgame mode
-  const queue = new Queue(torrent);
+  // peerInfos = peers.map(peer => ({
+  //   ip: peer.ip,
+  //   port: peer.port,
+  //   status: "Connecting...",
+  //   speed: 0,
+  //   socket: null, // will be set in download()
+  // }));
+  // peerTable.setData({
+  //   headers: [" IP", " Port", " Status", " Speed"],
+  //   data: peerInfos.map(peer => [peer.ip, peer.port, peer.status, peer.speed]),
+  // });
+  if (!pieces)pieces = new Pieces(torrent); //to avoid losing data upon restart only create these once
+  if (!queue)queue = new Queue(torrent);
 
   // Set up the endgame timer ONCE for all peers
   setupEndgameTimer(peers, pieces, queue, torrent);
 
-  const file = fs.openSync(path, "w");
+  if (!file)file = fs.openSync(path, "w");
   fs.ftruncateSync(file, Number(size(torrent).readBigUInt64BE()));
+  if (!torrentInfo)torrentInfo = torrent;
+  if (!filePath)filePath = path;
   peers.forEach((peer) => download(peer, torrent, pieces, file, peers, path));
 };
 
 const download = (peer, torrent, pieces, file, peers, filePath) => {
-  updateStatus("Trying to download from peers...");
+  updateStatus(`{cyan-fg}Downloading...{/cyan-fg}`);
   const socket = new net.Socket();
+  activeSockets.push(socket);
+
+  socket.on("close", () => {
+    activeSockets = activeSockets.filter(s => s !== socket);
+  });
   socket.on("error", (err) => {
     log(`Socket error: ${err}`);
+    activeSockets = activeSockets.filter(s => s !== socket);
   });
 
   socket.connect(peer.port, peer.ip, () => {
@@ -224,7 +269,7 @@ const pieceHandler = (
       try {
         fs.closeSync(file);
         fileClosed = true;
-        updateStatus(`{green-fg}Finished Writing{/green-fg}`);
+        updateStatus(`{Yellow-fg}Finished Writing{/yellow-fg}`);
 
         fileTypeFromFile(filePath).then((fileType) => {
           if (fileType && fileType.ext) {
@@ -233,6 +278,7 @@ const pieceHandler = (
             updateStatus(`{green-fg}Download Complete!{/green-fg}`);
           }
         });
+        downloadComplete = true;
       } catch (err) {
         updateError(`{red-fg}Error writing file: ${err} {/red-fg}`);
       }
@@ -253,10 +299,11 @@ const pieceHandler = (
 };
 
 const requestPiece = (socket, pieces, queue) => {
-  if (queue.choked) return null;
+  if(isPaused) return;
+  if (queue.choked) return;
   log(`queue length: ${queue.length()}`);
 
-  if (socket.destroyed || !socket.writable) return null;
+  if (socket.destroyed || !socket.writable) return;
 
   if (queue.length() === 0 && !pieces.isDone()) {
     refillQueueForPeer(queue, pieces, socket.peerBitfield, torrent);
@@ -337,4 +384,4 @@ function endgameRequest(peers, pieces, queue, torrent) {
   }
 }
 
-export { download, iteratePeers };
+export { download, iteratePeers, togglePause };

@@ -35,7 +35,7 @@ const checkInternetConnection = () => {
   });
 };
 
-const input = "./torrents/vice.torrent";
+const input = "./torrents/kali-linux-2025.2-cloud-genericcloud-arm64-tar-xz.torrent";
 let torrent;
 let pieceSize;
 
@@ -61,12 +61,7 @@ const main = async () => {
     process.exit(1);
   }
 };
-// const input = "./torrents/linuxmint-22.1-cinnamon-64bit.iso.torrent";
-// if (!input.endsWith(".torrent")) {
-//   showErrorAndExit("Please provide a valid torrent file");
-//   await new Promise((resolve) => setTimeout(resolve, 5000));
-//   process.exit(1);
-// }
+
 let peers = [];
 function startDownload() {
   getPeers(torrent, (callback) => {
@@ -76,25 +71,13 @@ function startDownload() {
     updateTorrentName(path);
     updateSize(Number(size(torrent).readBigUInt64BE()));
     peers = callback;
+    updateStatus(`{yellow-fg}Preparing to download{/yellow-fg}`);
     updatePeers(peers.length);
     iteratePeers(peers, torrent, path);
   });
 }
 
 main();
-// download(torrent, torrent.info.name);
-
-// log("Torrent Info Structure:");
-// for (let key in torrent.info) {
-//   if (key === "pieces") {
-//     log(`${key}: <Binary data of length ${torrent.info[key].length}>`);
-//     log(typeof torrent.info[key]);
-//   } else if (Buffer.isBuffer(torrent.info[key])) {
-//     log(`${key}: ${torrent.info[key].toString("utf8")}`);
-//   } else {
-//     log(`${key}: ${JSON.stringify(torrent.info[key])}`);
-//   }
-// }
 
 //https://linuxtracker.org/
 //kali-linux-2025.2-cloud-genericcloud-arm64-tar-xz
