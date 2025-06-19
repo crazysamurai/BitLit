@@ -27,7 +27,8 @@ let file = null;
 let torrentInfo = null;
 let filePath = null;
 let downloadComplete = false;
-// let peerInfos = [];
+let peerInfos = [];
+let speedUpdateInterval = null;
 
 let activeSockets = []
 let isPaused = false;
@@ -52,17 +53,20 @@ let fileClosed = false;
 let pendingWrites = 0; //tracks how many asynchronous file write operations are currently in progress.
 
 const iteratePeers = (peers, torrent, path) => {
-  // peerInfos = peers.map(peer => ({
-  //   ip: peer.ip,
-  //   port: peer.port,
-  //   status: "Connecting...",
-  //   speed: 0,
-  //   socket: null, // will be set in download()
-  // }));
-  // peerTable.setData({
-  //   headers: [" IP", " Port", " Status", " Speed"],
-  //   data: peerInfos.map(peer => [peer.ip, peer.port, peer.status, peer.speed]),
-  // });
+  peerInfos = peers.map(peer => ({
+    ip: peer.ip,
+    port: peer.port,
+    status: "Connecting...",
+    speed: 0,
+    speedometer:speedometer(),
+    socket: null, // will be set in download()
+  }));
+  peerTable.setData({
+    headers: [" Peer IP", " Port", " Status", " Speed"],
+    data: peerInfos.map(peer => [peer.ip, peer.port, peer.status, peer.speed]),
+  });
+  startSpeedUpdates();
+
   if (!pieces)pieces = new Pieces(torrent); //to avoid losing data upon restart only create these once
   if (!queue)queue = new Queue(torrent);
 
@@ -78,20 +82,24 @@ const iteratePeers = (peers, torrent, path) => {
 
 const download = (peer, torrent, pieces, file, peers, filePath) => {
   updateStatus(`{cyan-fg}Downloading...{/cyan-fg}`);
+  
   const socket = new net.Socket();
   activeSockets.push(socket);
 
   socket.on("close", () => {
     activeSockets = activeSockets.filter(s => s !== socket);
+    updatePeerInfo(peer.ip, peer.port, "Disconnected", 0);
   });
   socket.on("error", (err) => {
     log(`Socket error: ${err}`);
     activeSockets = activeSockets.filter(s => s !== socket);
+    updatePeerInfo(peer.ip, peer.port, "Socket Error", 0);
   });
 
   socket.connect(peer.port, peer.ip, () => {
     socket.peer = peer;
     peer.socket = socket;
+    updatePeerInfo(peer.ip, peer.port, "Connected", 0);
     socket.write(message.buildHandShake(torrent)); //send handshake message to peer
   });
 
@@ -122,6 +130,7 @@ const onWholeMessage = (peers, socket, callback) => {
   let savedBuf = Buffer.alloc(0);
   let handshake = true;
 
+  //for network activity
   const downSpeed = speedometer();
   const UPDATE_INTERVAL = 2000;
 
@@ -138,6 +147,14 @@ const onWholeMessage = (peers, socket, callback) => {
     };
     savedBuf = Buffer.concat([savedBuf, recvBuf]);
 
+    //per peer speed
+    if (!socket.peer) return;
+    const peerInfo = peerInfos.find(p => p.ip === socket.peer.ip && p.port === socket.peer.port);
+    if (peerInfo && peerInfo.speedometer) {
+      peerInfo.speedometer(recvBuf.length); // feed received bytes to speedometer
+    }
+
+    //overall speed
     const currentSpeed = downSpeed(msgLen()); // bytes per second
     const now = Date.now();
     if (now - lastSpeedUpdate >= UPDATE_INTERVAL) {
@@ -183,6 +200,7 @@ const msgHandler = (
         m.payload,
         peers
       );
+      updatePeerInfo(socket.peer.ip, socket.peer.port, `Downloading`, socket.peer.speed);
   }
 };
 
@@ -325,6 +343,34 @@ const isHandShake = (msg) => {
     msg.toString("utf-8", 1, 1 + msg.readUInt8(0)) === "BitTorrent protocol"
   );
 };
+
+//following two functions handle speed per peer to display in the table
+function updatePeerInfo(ip, port, newStatus, newSpeed) {
+  const peer = peerInfos.find(p => p.ip === ip && p.port === port);
+  if (peer) {
+    if (typeof newStatus !== 'undefined') peer.status = newStatus;
+    if (typeof newSpeed !== 'undefined') peer.speed = newSpeed;
+    peerTable.setData({
+      headers: [" Peer IP", " Port", " Status", " Speed"],
+      data: peerInfos.map(peer => [peer.ip, peer.port, peer.status, peer.speed]),
+    });
+    if (typeof screen !== 'undefined' && screen.render) screen.render();
+  }
+}
+
+function startSpeedUpdates() {
+  if (speedUpdateInterval) return; // Prevent multiple intervals
+  speedUpdateInterval = setInterval(() => {
+    peerInfos.forEach(peer => {
+      if (peer.speedometer) {
+        const speed = peer.speedometer();
+        peer.speed = speed ? ((speed * 8) / 1_000_000).toFixed(2) + ' Mb/s' : '0';
+        updatePeerInfo(peer.ip, peer.port, undefined, peer.speed);
+      }
+    });
+  }, 1000); // every second
+}
+
 
 function refillQueueForPeer(queue, pieces, peerBitfield, torrent) {
   const missingBlocks = pieces.listMissingBlocksForPeer(peerBitfield);

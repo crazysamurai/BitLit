@@ -42,8 +42,6 @@ screen.program.hideCursor();
 screen.title = "BitLit";
 
 const background = blessed.box({
-  top: 0,
-  left: 0,
   width: "100%",
   height: "100%",
   style: {
@@ -51,13 +49,25 @@ const background = blessed.box({
   },
 });
 
-const logoBox = blessed.text({
+const layout = blessed.layout({
   parent: screen,
+  width: '80%',
+  height: '100%',
+  layout:"grid",
+  left:"center",
+  style: { bg: 'black' }
+});
+
+
+const logoBox = blessed.box({
+  parent: layout,
   width: "shrink",
-  height: 7,
-  left: "center",
+  height: 5,
+  row: 0,
+  col: 0,
+  rowSpan: 1,
+  colSpan: 12,
   align: "center",
-  top: 0,
   content: `
 ┳┓• ┓ • 
 ┣┫┓╋┃ ┓╋
@@ -69,12 +79,48 @@ const logoBox = blessed.text({
   },
 });
 
-const progressContainer = blessed.box({
-  parent: screen,
+const contentBox = blessed.box({
+  parent: layout,
+  row: 1,
+  col: 0,
+  rowSpan: 6,
+  colSpan: 12,
   width: "80%",
+  tags: true,
+  style: {
+    fg: "white",
+    bg: "black",
+    content: {
+      left: "center",
+      align: "center",
+    },
+  },
+});
+
+const helpContainer = blessed.box({
+  parent: layout,
+  row: 7,
+  col: 0,
+  rowSpan: 1,
+  colSpan: 12,
+  width: "80%",
+  height: 2,
+  tags:true,
+  content: `{bold}Press 'p' to pause/resume, 'q' to quit{/bold}`,
+  style: {
+    fg:"white",
+    bg: "black",
+  },
+});
+
+const progressContainer = blessed.layout({
+  parent: layout,
+  width: "80%",
+  row: 8,
+  col: 0,
+  rowSpan: 1,
+  colSpan: 12,
   height: 3,
-  left: "center",
-  top: "100%-7",
   style: {
     bg: "black",
   },
@@ -85,7 +131,7 @@ const progressBar = blessed.progressbar({
   width: "100%",
   height: 3,
   left: "center",
-  top: "100%-2",
+  // top: "100%-2",
   orientation: "horizontal",
   ch: "░",
   border: "line",
@@ -103,66 +149,33 @@ const progressBar = blessed.progressbar({
   },
 });
 
-const percentText = blessed.text({
-  parent: progressContainer,
-  width: "shrink",
-  height: 1,
-  top: "100%-1",
-  left: "center",
-  align: "center",
-  content: "0%",
-  style: {
-    fg: "white",
-    bg: "black",
-  },
-});
-
-const helpContainer = blessed.box({
-  parent: screen,
-  width: "80%",
-  height: 1,
-  top:"100%-2",
-  left: "center",
-  align: "center",
-  content: "Press 'p' to pause/resume, 'q' to quit",
-  style: {
-    fg: "white",
-    bg: "black",
-  },
-});
-
 const peerTable = contrib.table({
-  parent:screen,
-  interactive: true,
-  top:"100%-15",
-  left:"center",
+  parent:layout,
+  interactive: false,
+  keys: false,
+  mouse:false,
+  row: 9,
+  col: 0,
+  rowSpan: 3,
+  colSpan: 12,
   width: "80%",
-  height:8,
   border:{type:"line"},
   columnSpacing:2,
-  columnWidth:[30,8,20,10],
+  columnWidth:[25,25,25,25],
   style:{
-    header: { fg: 'cyan' },
+    header: { fg: 'white' },
     cell: { fg: 'white' }
+  },
+  scrollbar: {
+    ch: '░',    
+    track: {
+      bg: 'gray'
+    },
+    style: {
+      inverse: true
+    }
   }
 })
-
-const contentBox = blessed.box({
-  parent: screen,
-  top: 5,
-  left: "center",
-  width: "80%",
-  height: "100%-7",
-  tags: true,
-  style: {
-    fg: "white",
-    bg: "black",
-    content: {
-      left: "center",
-      align: "center",
-    },
-  },
-});
 
 const updateUI = () => {
   if (hasError) return;
@@ -189,8 +202,13 @@ const updateUI = () => {
     ? Math.min(100, (state.downloadedBytes / state.totalSizeInBytes) * 100)
     : 0;
   progressBar.setProgress(percent);
-  percentText.setContent(`${Math.floor(percent)}%`);
+  progressBar.setLabel(` ${Math.floor(percent)}% `);
+  // percentText.setContent(`${Math.floor(percent)}%`);
   screen.render();
+  if (screen.focused && typeof screen.focused.blur === "function") {
+    screen.focused.blur();
+  }
+  screen.program.hideCursor();
 };
 
 //elapsed timer
@@ -211,6 +229,7 @@ function updateError(newError) {
   hasError = true;
   contentBox.setContent(`{red-fg}{bold}Error: ${newError}{/bold}{/red-fg}`);
   screen.render();
+  screen.program.hideCursor();
 }
 
 function updateTorrentName(newtorrentName) {
@@ -361,37 +380,26 @@ function colorSpeed(speed) {
   }
 }
 
-screen.append(background);
-screen.append(logoBox);
-screen.append(contentBox);
+// screen.append(background);
+// screen.append(logoBox);
+// screen.append(contentBox);
 // screen.append(peerTable)
-screen.append(progressContainer);
-screen.append(helpContainer);
+// screen.append(progressContainer);
+// screen.append(helpContainer);
 
+screen.render();
+screen.program.hideCursor();
 
 // Quit on Escape, q, or Control-C.
 screen.key(["escape", "q", "C-c"], function (ch, key) {
   screen.program.showCursor();
   return process.exit(0);
 });
-screen.key(['up', 'down', 'pageup', 'pagedown'], function() {
-  // This handler is just to ensure keys are registered.
-});
+
 screen.key("p", function (ch, key) {
   togglePause();
 });
 
-// screen.key('tab', () => {
-//   peerTable.focus();
-//   screen.render();
-// });
-
-// screen.key('escape', () => {
-//   screen.focusPop();
-//   screen.render();
-// });
-
-screen.render();
 export {
   updateSeedersLeechers,
   updateDownloadSpeed,
