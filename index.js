@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { getPeers } from "./src/tracker.js";
 import { open, size } from "./src/torrent-parser.js";
 import { iteratePeers } from "./src/download.js";
@@ -7,9 +9,22 @@ import {
   updateStatus,
   updatePeers,
   updateSize,
+  setOnTorrentFileSelected,
+  setDownloadStarted,
 } from "./screen/ui.js";
 import dns from "node:dns";
 import { log } from "./src/util.js";
+import path from "path";
+import fs from "fs";
+import os from "os"
+
+const homeDir = os.homedir()
+let outputPath;
+
+let downloadsDir = path.join(homeDir, "Downloads");
+if (!fs.existsSync(downloadsDir)) {
+  fs.mkdirSync(downloadsDir);
+}
 
 const showErrorAndExit = (message) => {
   updateError(message + "\nExiting in 5 seconds...");
@@ -35,9 +50,27 @@ const checkInternetConnection = () => {
   });
 };
 
-const input = "./torrents/kali-linux-2025.2-cloud-genericcloud-arm64-tar-xz.torrent";
+let input;
 let torrent;
 let pieceSize;
+
+function startDownloadWithFile(filePath) {
+  setDownloadStarted(true);
+  input = filePath;
+  main();
+}
+
+setOnTorrentFileSelected(startDownloadWithFile);
+
+function checkForTorrentFile() {
+  if (!input) {
+    updateStatus(
+      `{yellow-fg}No torrent file selected. Press 'o' to pick a file.{/yellow-fg}`
+    );
+  } else {
+    main();
+  }
+}
 
 const main = async () => {
   const online = await checkInternetConnection();
@@ -66,26 +99,18 @@ let peers = [];
 function startDownload() {
   getPeers(torrent, (callback) => {
     updateStatus("Connecting with peers...");
-    let path = new Buffer.from(torrent.info.name).toString("utf-8");
-    log(`path: ${path}`);
-    updateTorrentName(path);
+    let fileName = new Buffer.from(torrent.info.name).toString("utf-8");
+    outputPath = path.join(downloadsDir, fileName);
+    log(`path: ${outputPath}`);
+    updateTorrentName(fileName);
     updateSize(Number(size(torrent).readBigUInt64BE()));
     peers = callback;
     updateStatus(`{yellow-fg}Preparing to download{/yellow-fg}`);
     updatePeers(peers.length);
-    iteratePeers(peers, torrent, path);
+    iteratePeers(peers, torrent, outputPath);
   });
 }
 
-main();
+checkForTorrentFile();
 
-//https://linuxtracker.org/
-//kali-linux-2025.2-cloud-genericcloud-arm64-tar-xz
-//kali-nethunter-2025.2-es2-pie-minimal-zip
-//CentOS Stream 8 Boot ISO
-//"./torrents/linuxmint-22.1-cinnamon-64bit.iso.torrent"
-// "./torrents/Sniper Elite 5 [DODI Repack].torrent"
-// "./torrents/1torr.torrent"
-//const torrent = torrentParser.open(process.argv[2]);
-//node index.js /file/path/to/name-of-torrent.torrent
-export { torrent, pieceSize, peers };
+export { torrent, pieceSize, peers, outputPath };

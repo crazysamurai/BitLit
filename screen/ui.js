@@ -2,9 +2,11 @@ import blessed from "blessed";
 import contrib from "blessed-contrib";
 import { pieceSize } from "../index.js";
 import { togglePause } from "../src/download.js";
+import { getDiskInfoSync } from "node-disk-info";
+import dns from "node:dns"
 
 const state = {
-  torrentName: "Getting torrent info...",
+  torrentName: "Unavailable",
   size: 0, //total size of the torrent
   totalSizeInBytes: 0, // total size in bytes
   remaining: 0, //remaining size to download
@@ -28,6 +30,7 @@ const state = {
   elapsedSeconds: 1, // elapsed time in seconds
   lastDownloadedBytes: 0,
   lastSpeedCheckTime: Date.now(),
+  pausedForNoInternet: false,
 };
 
 let hasError = false;
@@ -51,13 +54,12 @@ const background = blessed.box({
 
 const layout = blessed.layout({
   parent: screen,
-  width: '80%',
-  height: '100%',
-  layout:"grid",
-  left:"center",
-  style: { bg: 'black' }
+  width: "80%",
+  height: "100%",
+  layout: "grid",
+  left: "center",
+  style: { bg: "black" },
 });
-
 
 const logoBox = blessed.box({
   parent: layout,
@@ -105,10 +107,10 @@ const helpContainer = blessed.box({
   colSpan: 12,
   width: "80%",
   height: 2,
-  tags:true,
+  tags: true,
   content: `{bold}Press 'p' to pause/resume, 'q' to quit{/bold}`,
   style: {
-    fg:"white",
+    fg: "white",
     bg: "black",
   },
 });
@@ -150,32 +152,32 @@ const progressBar = blessed.progressbar({
 });
 
 const peerTable = contrib.table({
-  parent:layout,
+  parent: layout,
   interactive: false,
   keys: false,
-  mouse:false,
+  mouse: false,
   row: 9,
   col: 0,
   rowSpan: 3,
   colSpan: 12,
   width: "80%",
-  border:{type:"line"},
-  columnSpacing:2,
-  columnWidth:[25,25,25,25],
-  style:{
-    header: { fg: 'white' },
-    cell: { fg: 'white' }
+  border: { type: "line" },
+  columnSpacing: 2,
+  columnWidth: [25, 25, 25, 25],
+  style: {
+    header: { fg: "white" },
+    cell: { fg: "white" },
   },
   scrollbar: {
-    ch: '░',    
+    ch: "░",
     track: {
-      bg: 'gray'
+      bg: "gray",
     },
     style: {
-      inverse: true
-    }
-  }
-})
+      inverse: true,
+    },
+  },
+});
 
 const updateUI = () => {
   if (hasError) return;
@@ -257,8 +259,22 @@ function updatePeers(newPeers) {
 
 function updateDownloadSpeed(newDownloadSpeed) {
   if (!Number.isFinite(newDownloadSpeed)) newDownloadSpeed = 0;
-  state.downloadSpeed = newDownloadSpeed; //bytes per second
-  if (newDownloadSpeed > 0) updateAverageDownloadSpeed(newDownloadSpeed);
+  state.downloadSpeed = newDownloadSpeed; // bytes per second
+
+  if (newDownloadSpeed === 0) {
+    //check if internet is available
+      dns.lookup("google.com", (err) => {
+        if (err) {
+          if (!downloadStarted) return;
+          togglePause();
+          state.pausedForNoInternet = true;
+          updateStatus("{red-fg}Download Paused. No Internet Connection.{/red-fg}");
+        }
+        updateUI();
+      });
+    return;
+  }
+  updateAverageDownloadSpeed(newDownloadSpeed);
   updateUI();
 }
 
@@ -367,7 +383,7 @@ function updateAverageDownloadSpeed(currentSpeed) {
 
 function colorSpeed(speed) {
   if (!Number.isFinite(speed)) speed = 0;
-  // speed in B/s, convert to KB/s for thresholds
+  // speed in B/s, convert to KB/s
   const kbps = speed / 1024;
   if (kbps < 100) {
     return `{red-fg}${((speed * 8) / 1_000_000).toFixed(2)} Mb/s{/red-fg}`;
@@ -380,12 +396,138 @@ function colorSpeed(speed) {
   }
 }
 
-// screen.append(background);
-// screen.append(logoBox);
-// screen.append(contentBox);
-// screen.append(peerTable)
-// screen.append(progressContainer);
-// screen.append(helpContainer);
+function getWindowsDrives() {
+  try {
+    const disks = getDiskInfoSync();
+    return disks.map(disk => disk.mounted); 
+  } catch (e) {
+    return ["C:/"]; // fallback
+  }
+}
+
+
+let downloadStarted = false;
+function setDownloadStarted(val = true) {
+  downloadStarted = val;
+}
+
+let fileManager = null;
+function promptForTorrentFile() {
+  if (downloadStarted) return;
+  return new Promise((resolve) => {
+    //remove background widgets
+    screen.children.forEach((child) => child.hide());
+    //fetch drives
+    const drives = getWindowsDrives();
+    const driveList = blessed.list({
+      parent: screen,
+      label: " Select Drive ",
+      width: "30%",
+      height: drives.length + 4,
+      top: "center",
+      left: "center",
+      border: "line",
+      style: {
+        fg: "white",
+        bg: "black",
+        border: { fg: "cyan" },
+        selected: { bg: "blue" },
+        item: { fg: "white", bg: "black" },
+        selected: { fg: "white", bg: "cyan" }
+      },
+      items: drives,
+      keys: true,
+      mouse: true,
+      vi: true,
+    });
+
+    driveList.focus();
+    screen.append(driveList);
+    screen.render();
+
+    driveList.on("select", (item, idx) => {
+      const selectedDrive = drives[idx];
+      screen.remove(driveList);
+      showFileManager(selectedDrive);
+    });
+
+    driveList.on("cancel", () => {
+      screen.remove(driveList);
+      screen.render();
+      resolve(null);
+    });
+
+    function showFileManager(selectedDrive) {
+      const fileManager = blessed.filemanager({
+        parent: screen,
+        label: " Select a .torrent file ",
+        width: "80%",
+        height: "80%",
+        top: "center",
+        left: "center",
+        border: "line",
+        style: {
+          fg: "white",
+          bg: "black",
+          border: { fg: "cyan" },
+          selected: { bg: "blue" },
+          item: { fg: "white", bg: "black" },
+          selected: { fg: "white", bg: "cyan" }
+        },
+        cwd: selectedDrive,
+        keys: true,
+        vi: true,
+        mouse: true,
+        hidden: false,
+      });
+    
+      fileManager.focus();
+      screen.append(fileManager);
+      fileManager.refresh();
+      screen.render();
+    
+      fileManager.on("file", (file) => {
+        if (file.endsWith(".torrent")) {
+          screen.remove(fileManager);
+          screen.children.forEach((child) => child.show());
+          screen.render();
+          resolve(file);
+        } else {
+          screen.children.forEach((child) => child.show());
+          screen.render();
+          fileManager.setLabel(" Please select a .torrent file ");
+        }
+      });
+    
+      fileManager.on("cancel", () => {
+        screen.remove(fileManager);
+        screen.children.forEach((child) => child.show());
+        screen.render();
+        resolve(null);
+      });
+    }
+  });
+}
+
+let onTorrentFileSelected = null;
+
+function setOnTorrentFileSelected(cb) {
+  onTorrentFileSelected = cb;
+}
+
+screen.key("o", async () => {
+  if (fileManager) {
+    screen.remove(fileManager);
+    fileManager = null;
+    screen.children.forEach((child) => child.show());
+    screen.render();
+  } else {
+    const file = await promptForTorrentFile();
+    if (file && onTorrentFileSelected) {
+      onTorrentFileSelected(file);
+    }
+  }
+});
 
 screen.render();
 screen.program.hideCursor();
@@ -397,6 +539,7 @@ screen.key(["escape", "q", "C-c"], function (ch, key) {
 });
 
 screen.key("p", function (ch, key) {
+  if(!downloadStarted)return
   togglePause();
 });
 
@@ -416,5 +559,8 @@ export {
   updateAverageDownloadSpeed,
   updateRemainingPieces,
   stopElapsedTimer,
-  peerTable
+  peerTable,
+  promptForTorrentFile,
+  setOnTorrentFileSelected,
+  setDownloadStarted,
 };
