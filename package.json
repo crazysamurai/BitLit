@@ -1,0 +1,27 @@
+{
+  "name": "bitlit",
+  "bin": {
+    "bitlit": "./index.js"
+  },
+  "version": "1.0.0",
+  "description": "A terminal based torrent client.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crazysamurai/BitLit.git"
+  },
+  "author": "crazysamurai",
+  "license": "ISC",
+  "dependencies": {
+    "bencode": "^4.0.0",
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
+    "file-type": "^21.0.0",
+    "node-disk-info": "^1.3.0",
+    "speedometer": "^1.1.0"
+  }
+}
