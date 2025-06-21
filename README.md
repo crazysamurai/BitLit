@@ -3,7 +3,7 @@
 A lightweight, terminal-based BitTorrent client built with Node.js. BitLit lets you download torrents right from your terminal with a fast and interactive UI.
 
 [![npm version](https://img.shields.io/npm/v/bitlit)](https://www.npmjs.com/package/bitlit)
-[![Node.js Version](https://img.shields.io/node/v/bitlit)](https://nodejs.org/)
+[![Node.js Version](https://img.shields.io/node/v/bitlit)](https://www.npmjs.com/package/bitlit)
 ![License](https://img.shields.io/github/license/crazysamurai/bitlit)
 ![Platform](https://img.shields.io/badge/platform-terminal-lightgrey)
 ![Issues](https://img.shields.io/github/issues/crazysamurai/bitlit)
@@ -12,7 +12,6 @@ A lightweight, terminal-based BitTorrent client built with Node.js. BitLit lets 
 ### Demo
 
 A quick look at BitLit running in the terminal:
-
 
 <img src="assets/demo.gif" width="600"/>
 
@@ -35,10 +34,10 @@ A quick look at BitLit running in the terminal:
 - 🧠 Endgame mode for faster completion
 - 🧩 File type detection & renaming
 
-
 ## Installation
 
 ### npm
+
 Install globally using npm:
 
 ```bash
@@ -52,7 +51,9 @@ npx bitlit
 ```
 
 ### Github
+
 Clone the repository:
+
 ```bash
 git clone https://github.com/crazysamurai/bitlit.git
 cd bitlit
@@ -60,6 +61,7 @@ npm install
 ```
 
 Install globally on your system:
+
 ```bash
 npm install -g .
 ```
@@ -108,10 +110,9 @@ bitlit
 - [ ] Magnet URI support
 - [ ] DHT support
 
-
 ## Contributing
 
-This project was created as a personal learning exercise to better understand the BitTorrent protocol and networking. 
+This project was created as a personal learning exercise to better understand the BitTorrent protocol and networking.
 Contributions and feedback are welcome!
 
 ## License
