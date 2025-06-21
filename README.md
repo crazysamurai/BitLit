@@ -111,7 +111,7 @@ bitlit
 
 ## Contributing
 
-This project was created as a personal learning exercise to better understand the BitTorrent protocol, networking. 
+This project was created as a personal learning exercise to better understand the BitTorrent protocol and networking. 
 Contributions and feedback are welcome!
 
 ## License
