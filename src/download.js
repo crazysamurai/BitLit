@@ -289,7 +289,6 @@ const pieceHandler = (
   peers
 ) => {
   if (fileClosed) return; //ignore if file is already closed
-
   pieces.addReceived(pieceResp);
 
   let remainingPieces = pieces.getMissingPieces();
