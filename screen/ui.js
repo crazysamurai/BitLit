@@ -496,7 +496,6 @@ function promptForTorrentFile() {
         mouse: true,
         hidden: false,
       });
-      screen.append(navigation);
       screen.append(errorBox)
       screen.append(fileManager);
       fileManager.refresh();

@@ -4,11 +4,15 @@
     "bitlit": "./index.js"
   },
   "version": "1.0.0",
-  "description": "a torrent application",
+  "description": "A terminal based torrent client.",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crazysamurai/BitLit.git"
   },
   "author": "crazysamurai",
   "license": "ISC",

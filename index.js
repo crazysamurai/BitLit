@@ -38,13 +38,13 @@ const checkInternetConnection = () => {
         showErrorAndExit(
           "No internet connection. Please check your network and try again."
         );
-        log("Failed to connect");
+        // log("Failed to connect");
         setTimeout(() => {
           process.exit(1);
         }, 5000);
         resolve(false);
       } else {
-        log("Internet connection is available.");
+        // log("Internet connection is available.");
         resolve(true);
       }
     });
@@ -103,7 +103,7 @@ function startDownload() {
     updateStatus("Connecting with peers...");
     let fileName = new Buffer.from(torrent.info.name).toString("utf-8");
     outputPath = path.join(downloadsDir, fileName);
-    log(`path: ${outputPath}`);
+    // log(`path: ${outputPath}`);
     updateTorrentName(fileName);
     updateSize(Number(size(torrent).readBigUInt64BE()));
     peers = callback;
@@ -114,5 +114,9 @@ function startDownload() {
 }
 
 checkForTorrentFile();
+
+export default function checkInstall() {
+  console.log("BitLit is installed successfully.");
+}
 
 export { torrent, pieceSize, peers, outputPath };
