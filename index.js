@@ -30,6 +30,7 @@ const showErrorAndExit = (message) => {
   updateError(message + "\nExiting in 5 seconds...");
 };
 
+//backup check, might remove later
 const checkInternetConnection = () => {
   return new Promise((resolve) => {
     dns.lookup("google.com", (err) => {
@@ -76,6 +77,7 @@ const main = async () => {
   const online = await checkInternetConnection();
   if (!online) return;
 
+  //backup check, might remove later
   if (!input.endsWith(".torrent")) {
     showErrorAndExit("Please provide a valid torrent file");
     await new Promise((resolve) => setTimeout(resolve, 5000));

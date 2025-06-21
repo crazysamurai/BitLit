@@ -44,17 +44,9 @@ screen.program.hideCursor();
 
 screen.title = "BitLit";
 
-const background = blessed.box({
-  width: "100%",
-  height: "100%",
-  style: {
-    bg: "black",
-  },
-});
-
 const layout = blessed.layout({
   parent: screen,
-  width: "80%",
+  width: "100%",
   height: "100%",
   layout: "grid",
   left: "center",
@@ -87,7 +79,7 @@ const contentBox = blessed.box({
   col: 0,
   rowSpan: 6,
   colSpan: 12,
-  width: "80%",
+  width: "100%",
   tags: true,
   style: {
     fg: "white",
@@ -105,7 +97,7 @@ const helpContainer = blessed.box({
   col: 0,
   rowSpan: 1,
   colSpan: 12,
-  width: "80%",
+  width: "100%",
   height: 2,
   tags: true,
   content: `{bold}Press 'p' to pause/resume, 'q' to quit{/bold}`,
@@ -115,30 +107,20 @@ const helpContainer = blessed.box({
   },
 });
 
-const progressContainer = blessed.layout({
+const progressBar = blessed.progressbar({
   parent: layout,
-  width: "80%",
   row: 8,
   col: 0,
   rowSpan: 1,
   colSpan: 12,
   height: 3,
-  style: {
-    bg: "black",
-  },
-});
-
-const progressBar = blessed.progressbar({
-  parent: progressContainer,
-  width: "100%",
-  height: 3,
+  width: "60%",
   left: "center",
-  // top: "100%-2",
   orientation: "horizontal",
   ch: "░",
   border: "line",
   filled: 0,
-  label: "Download Progress",
+  label: " Download Progress ",
   style: {
     fg: "cyan",
     bg: "black",
@@ -153,6 +135,7 @@ const progressBar = blessed.progressbar({
 
 const peerTable = contrib.table({
   parent: layout,
+  label:" Peers ",
   interactive: false,
   keys: false,
   mouse: false,
@@ -160,7 +143,7 @@ const peerTable = contrib.table({
   col: 0,
   rowSpan: 3,
   colSpan: 12,
-  width: "80%",
+  width: "60%",
   border: { type: "line" },
   columnSpacing: 2,
   columnWidth: [25, 25, 25, 25],
@@ -200,16 +183,13 @@ const updateUI = () => {
       Average Download Speed:   ${colorSpeed(state.averageDownloadSpeed)}\n
       Disk Utilization:         ${state.diskUtilization} MB/s\n
     `);
+  if(downloadStarted){
   const percent = state.totalSizeInBytes
     ? Math.min(100, (state.downloadedBytes / state.totalSizeInBytes) * 100)
     : 0;
   progressBar.setProgress(percent);
-  progressBar.setLabel(` ${Math.floor(percent)}% `);
-  // percentText.setContent(`${Math.floor(percent)}%`);
+  progressBar.setLabel(` ${Math.floor(percent)}% `);}
   screen.render();
-  if (screen.focused && typeof screen.focused.blur === "function") {
-    screen.focused.blur();
-  }
   screen.program.hideCursor();
 };
 
@@ -304,7 +284,6 @@ function updateTotalPieces(torrSize) {
 }
 
 function updateDiskUtilization(newDiskUtilization) {
-  // When calculating disk utilization, check for Infinity or NaN
   state.diskUtilization = isFinite(newDiskUtilization) ? newDiskUtilization : 0;
   updateUI();
 }
@@ -405,21 +384,50 @@ function getWindowsDrives() {
   }
 }
 
-
 let downloadStarted = false;
 function setDownloadStarted(val = true) {
   downloadStarted = val;
 }
 
 let fileManager = null;
+let driveList = null;
 function promptForTorrentFile() {
   if (downloadStarted) return;
   return new Promise((resolve) => {
     //remove background widgets
     screen.children.forEach((child) => child.hide());
+    //nav box
+    const navigation = blessed.box({
+      parent: screen,
+      focusable:false,
+      width: "100%",
+      height: 2,
+      top: 2,
+      align:"center",
+      left: "center",
+      style: {
+        fg: "white",
+        bg: "black",
+      },
+      content: "Use arrow keys to navigate",
+    })
+    const errorBox = blessed.box({
+      parent: screen,
+      focusable:false,
+      width: "100%",
+      height: 2,
+      top: 4,
+      align:"center",
+      left: "center",
+      style: {
+        fg: "red",
+        bg: "black",
+      },
+      content: "",
+    })
     //fetch drives
     const drives = getWindowsDrives();
-    const driveList = blessed.list({
+    driveList = blessed.list({
       parent: screen,
       label: " Select Drive ",
       width: "30%",
@@ -440,27 +448,35 @@ function promptForTorrentFile() {
       mouse: true,
       vi: true,
     });
-
-    driveList.focus();
+    screen.append(navigation);
     screen.append(driveList);
+    driveList.focus();
     screen.render();
 
     driveList.on("select", (item, idx) => {
       const selectedDrive = drives[idx];
       screen.remove(driveList);
+      screen.remove(errorBox)
+      screen.remove(navigation)
       showFileManager(selectedDrive);
     });
 
     driveList.on("cancel", () => {
-      screen.remove(driveList);
+      if (driveList && driveList.parent) {
+        screen.remove(driveList);
+      }
+      screen.remove(navigation);
+      screen.remove(errorBox)
+      driveList = null;
+      screen.children.forEach((child) => child.show());
       screen.render();
       resolve(null);
     });
 
     function showFileManager(selectedDrive) {
-      const fileManager = blessed.filemanager({
+      fileManager = blessed.filemanager({
         parent: screen,
-        label: " Select a .torrent file ",
+        label: " %path ",
         width: "80%",
         height: "80%",
         top: "center",
@@ -480,27 +496,34 @@ function promptForTorrentFile() {
         mouse: true,
         hidden: false,
       });
-    
-      fileManager.focus();
+      screen.append(navigation);
+      screen.append(errorBox)
       screen.append(fileManager);
       fileManager.refresh();
+      fileManager.focus();
       screen.render();
     
       fileManager.on("file", (file) => {
         if (file.endsWith(".torrent")) {
           screen.remove(fileManager);
+          screen.remove(errorBox)
+          screen.remove(navigation)
           screen.children.forEach((child) => child.show());
           screen.render();
           resolve(file);
         } else {
-          screen.children.forEach((child) => child.show());
+          errorBox.setContent("Please select a .torrent file");
           screen.render();
-          fileManager.setLabel(" Please select a .torrent file ");
         }
       });
     
       fileManager.on("cancel", () => {
-        screen.remove(fileManager);
+        if (fileManager && fileManager.parent) {
+          screen.remove(fileManager);
+        }
+        screen.remove(navigation);
+        screen.remove(errorBox)
+        fileManager = null;
         screen.children.forEach((child) => child.show());
         screen.render();
         resolve(null);
@@ -510,7 +533,6 @@ function promptForTorrentFile() {
 }
 
 let onTorrentFileSelected = null;
-
 function setOnTorrentFileSelected(cb) {
   onTorrentFileSelected = cb;
 }
@@ -532,16 +554,25 @@ screen.key("o", async () => {
 screen.render();
 screen.program.hideCursor();
 
-// Quit on Escape, q, or Control-C.
-screen.key(["escape", "q", "C-c"], function (ch, key) {
+//quit, q, or control-c.
+screen.key(["q", "C-c"], function (ch, key) {
   screen.program.showCursor();
   return process.exit(0);
 });
-
+//pause/resume on p
 screen.key("p", function (ch, key) {
   if(!downloadStarted)return
   togglePause();
 });
+//go back to home on esc
+screen.key("escape", function(ch, key){
+  if (driveList) {
+    driveList.emit("cancel");
+  }
+  if (fileManager) {
+    fileManager.emit("cancel");
+  }
+})
 
 export {
   updateSeedersLeechers,

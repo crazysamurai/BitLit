@@ -32,9 +32,9 @@ class Pieces {
   addReceived(pieceBlock) {
     const blockIndex = pieceBlock.begin / BLOCK_LEN;
 
-    log(
-      `Received block for piece ${pieceBlock.index}, block index ${blockIndex}`
-    );
+    // log(
+    //   `Received block for piece ${pieceBlock.index}, block index ${blockIndex}`
+    // );
 
     this.#received[pieceBlock.index][blockIndex] = true;
     delete this.requestTimestamps[
@@ -67,7 +67,7 @@ class Pieces {
 
   listMissingBlocksForPiece(pieceIndex) {
     const blocks = this.#received[pieceIndex];
-    if (!blocks) return []; // Defensive: return empty if pieceIndex is invalid
+    if (!blocks) return []; //return empty if pieceIndex is invalid
     const missingBlocks = [];
     for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
       if (!blocks[blockIndex]) {
@@ -81,9 +81,9 @@ class Pieces {
     const now = Date.now();
     for (const key in this.requestTimestamps) {
       if (now - this.requestTimestamps[key] > this.REQUEST_TIMEOUT) {
-        // Parse key
+        //parse key
         const [pieceIndex, blockIndex] = key.split(":").map(Number);
-        // Mark as not requested
+        //mark as not requested
         this.#requested[pieceIndex][blockIndex] = false;
         delete this.requestTimestamps[key];
       }
@@ -93,7 +93,7 @@ class Pieces {
   isDone() {
     for (let i = 0; i < this.#received.length; i++) {
       if (!this.#received[i].every(Boolean)) {
-        log(`Piece ${i} not complete:`, this.#received[i]);
+        // log(`Piece ${i} not complete:`, this.#received[i]);
         return false;
       }
     }

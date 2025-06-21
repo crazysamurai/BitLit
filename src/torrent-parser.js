@@ -43,10 +43,10 @@ const pieceLen = (torrent, pieceIndex) => {
   const pieceLength = torrent.info["piece length"];
   const lastPieceIndex = Math.floor((totalLength - 1) / pieceLength);
   if (pieceIndex === lastPieceIndex) {
-    // For the last piece, return the remaining bytes
+    //for the last piece, return the remaining bytes
     return totalLength - pieceLength * lastPieceIndex;
   } else {
-    // For all other pieces, return the standard piece length
+    //for all other pieces, return the standard piece length
     return pieceLength;
   }
 };
@@ -54,7 +54,7 @@ const pieceLen = (torrent, pieceIndex) => {
 const blockLen = (torrent, pieceIndex, blockIndex) => {
   const pieceLength = pieceLen(torrent, pieceIndex);
   const numBlocks = Math.ceil(pieceLength / BLOCK_LEN);
-  // For the last block, return the remainder, otherwise BLOCK_LEN
+  //for the last block, return the remainder, otherwise BLOCK_LEN
   if (blockIndex === numBlocks - 1) {
     return pieceLength - BLOCK_LEN * (numBlocks - 1);
   } else {

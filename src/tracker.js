@@ -27,7 +27,7 @@ export const getPeers = async (torrent, callback) => {
   }
 
   socket.on("message", (res, info) => {
-    log(`Got response from ${info.address}:${info.port}`);
+    // log(`Got response from ${info.address}:${info.port}`);
 
     const type = respType(res);
 
@@ -46,11 +46,11 @@ export const getPeers = async (torrent, callback) => {
       const announceResp = parsedAnnounceResp(res);
       const trackerSource = `${info.address}:${info.port}`;
 
-      log(
-        `Tracker ${trackerSource} gave ${
-          announceResp.peers.length
-        } peers:\n${JSON.stringify(announceResp.peers, null, 2)}`
-      );
+      // log(
+      //   `Tracker ${trackerSource} gave ${
+      //     announceResp.peers.length
+      //   } peers:\n${JSON.stringify(announceResp.peers, null, 2)}`
+      // );
 
       announceResp.peers.forEach((peer) => {
         if (peer?.ip && peer?.port) {
@@ -74,7 +74,7 @@ export const getPeers = async (torrent, callback) => {
         rawUrl = new URL(new Buffer.from(torrent.announce).toString("utf-8"));
         if (!rawUrl.port) rawUrl.port = "6969";
       }
-      log(`Trying tracker: ${rawUrl.href}`);
+      // log(`Trying tracker: ${rawUrl.href}`);
 
       const { address: ip } = await dns.lookup(rawUrl.hostname);
       const trackerKey = `${ip}:${rawUrl.port}`;
@@ -98,29 +98,29 @@ export const getPeers = async (torrent, callback) => {
       );
       udpSend(socket, announceReq, rawUrl, () => {});
 
-      log(
-        `Connected to tracker: 
-          ${rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)}`
-      );
+      // log(
+      //   `Connected to tracker: 
+      //     ${rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)}`
+      // );
     } catch (err) {
-      log(`err.message: ${rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)}`);
+      // log(`err.message: ${rawUrl.href.slice(rawUrl.href.indexOf("://") + 3)}`);
       continue;
     }
   }
 
-  // Wait a bit to allow announce responses to come in
+  //wait a bit to allow announce responses to come in
   await new Promise((res) => setTimeout(res, 2000));
 
-  log(
-    `values: ${JSON.stringify(Array.from(peerMap.values()), null, 2)}, size: ${
-      peerMap.size
-    }`
-  );
+  // log(
+  //   `values: ${JSON.stringify(Array.from(peerMap.values()), null, 2)}, size: ${
+  //     peerMap.size
+  //   }`
+  // );
   callback(Array.from(peerMap.values())); //convert map to array and return unique peers
 };
 
 function udpSend(socket, message, rawUrl, callback = () => {}) {
-  log(`Sending UDP packet to ${rawUrl.hostname}:${rawUrl.port}`);
+  // log(`Sending UDP packet to ${rawUrl.hostname}:${rawUrl.port}`);
   socket.send(
     message,
     0,
