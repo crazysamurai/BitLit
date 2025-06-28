@@ -122,6 +122,6 @@ Contributions and feedback are welcome!
 ## Acknowledgements
 
 - Built with Node.js
-- Uses the BitTorrent protocol
+<!-- - Uses the BitTorrent protocol -->
 - Inspired by various open-source torrent clients
 - Inspired by [How to Make Your Own BitTorrent Client](https://allenkim67.github.io/programming/2016/05/04/how-to-make-your-own-bittorrent-client.html)

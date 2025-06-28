@@ -8,15 +8,14 @@ import { log } from "./util.js";
 import { promises as dns } from "node:dns";
 import { updateSeedersLeechers } from "../screen/ui.js";
 
-export const getPeers = async (torrent, callback) => {
-  updateStatus("Looking for trackers...");
+export const getPeers = async (torrent, peerMap, callback) => {
+  updateStatus("Finding Peers...");
+
   const socket = dgram.createSocket("udp4");
 
   let rawUrl;
   let listLength = 0; //length of announce-list
   let flag = false; //flag to check if announce-list is present
-
-  let peerMap = new Map(); //to store unique peers
   let trackerMap = new Map(); //to store resolve status of trackers
 
   if (torrent["announce-list"]) {

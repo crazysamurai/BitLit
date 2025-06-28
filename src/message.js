@@ -1,6 +1,7 @@
 import { genId } from "./util.js";
 import { infoHash } from "./torrent-parser.js";
-
+import { log } from "./util.js";
+import bencode from "bencode"
 //https://wiki.theory.org/BitTorrentSpecification#Messages
 
 const buildHandShake = (torrent) => {
@@ -24,7 +25,15 @@ const buildHandShake = (torrent) => {
   buf.writeUInt32BE(0, 24);
 
   //info_hash
-  infoHash(torrent).copy(buf, 28); //info_hash is a 20-byte buffer, so we copy it to the handshake buffer starting at byte 28
+
+  let infoHashBuffer;
+  if(typeof torrent.infoHash === "string"){
+    infoHashBuffer = Buffer.from(torrent.infoHash, "hex");
+  }else{
+    infoHashBuffer = infoHash(torrent)
+  }
+
+  infoHashBuffer.copy(buf, 28); //info_hash is a 20-byte buffer, so we copy it to the handshake buffer starting at byte 28
 
   //peer_id
   genId().copy(buf, 48);
@@ -181,6 +190,7 @@ const parse = (msg) => {
   // 7: piece, structure: {index, begin, block}
   // 8: cancel, structure: {index, begin, length}
 
+  const size = msg.readInt32BE(0);
   const id = msg.length > 4 ? msg.readInt8(4) : null; //message ID at index 4
   let payload = msg.length > 5 ? msg.slice(5) : null; //payload is the rest of the message after the message ID
   if (id === 6 || id === 7 || id === 8) {
@@ -192,9 +202,9 @@ const parse = (msg) => {
     payload[id === 7 ? "block" : "length"] = rest;
   }
   return {
-    size: msg.readInt32BE(0),
-    id: id,
-    payload: payload,
+    size,
+    id,
+    payload,
   };
 };
 

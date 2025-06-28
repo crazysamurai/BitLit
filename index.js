@@ -10,6 +10,7 @@ import {
   updatePeers,
   updateSize,
   setOnTorrentFileSelected,
+  setOnMagnetLinkSelected,
   setDownloadStarted,
 } from "./screen/ui.js";
 import dns from "node:dns";
@@ -17,6 +18,7 @@ import { log } from "./src/util.js";
 import path from "path";
 import fs from "fs";
 import os from "os"
+import { handleMagnet } from "./src/magnet-handler.js";
 
 const homeDir = os.homedir()
 let outputPath;
@@ -30,7 +32,7 @@ const showErrorAndExit = (message) => {
   updateError(message + "\nExiting in 5 seconds...");
 };
 
-//backup check, might remove later
+
 const checkInternetConnection = () => {
   return new Promise((resolve) => {
     dns.lookup("google.com", (err) => {
@@ -54,19 +56,34 @@ const checkInternetConnection = () => {
 let input;
 let torrent;
 let pieceSize;
+let peers = [];
+let peerMap = new Map(); //to store unique peers
 
-function startDownloadWithFile(filePath) {
-  setDownloadStarted(true);
+// function startDownloadWithFile(filePath) {
+//   setDownloadStarted(true);
+//   input = filePath;
+//   main();
+// }
+// log(`input link: ${input}`)
+// setOnTorrentFileSelected(startDownloadWithFile);
+
+setOnMagnetLinkSelected((magnetLink) => {
+  setDownloadStarted(true)
+  input = magnetLink;
+  main();
+});
+
+// Set up the torrent file handler
+setOnTorrentFileSelected((filePath) => {
+  setDownloadStarted(true)
   input = filePath;
   main();
-}
-
-setOnTorrentFileSelected(startDownloadWithFile);
+});
 
 function checkForTorrentFile() {
   if (!input) {
     updateStatus(
-      `{yellow-fg}No torrent file selected. Press 'o' to pick a file.{/yellow-fg}`
+      `{yellow-fg}No torrent file selected. Press 'o' to pick a .torrent file or 'm' to paste magnet link{/yellow-fg}.`
     );
   } else {
     main();
@@ -74,32 +91,42 @@ function checkForTorrentFile() {
 }
 
 const main = async () => {
+  log('Starting main with input:', input ? input.substring(0, 100) + (input.length > 100 ? '...' : '') : 'empty');
+
   const online = await checkInternetConnection();
   if (!online) return;
 
-  //backup check, might remove later
-  if (!input.endsWith(".torrent")) {
-    showErrorAndExit("Please provide a valid torrent file");
+  if (!input) {
+    showErrorAndExit("No input provided");
+    return;
+  }
+
+  if (!input.endsWith(".torrent") && !input.startsWith('magnet:')) {
+    showErrorAndExit("Please provide a valid torrent file or magnet link");
     await new Promise((resolve) => setTimeout(resolve, 5000));
     process.exit(1);
   }
 
-  try {
-    torrent = open(input);
-    pieceSize = torrent.info["piece length"];
-    startDownload();
-  } catch (err) {
-    showErrorAndExit(
-      "Could not open torrent file. Please check the file path and try again."
-    );
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-    process.exit(1);
+  if(input.endsWith(".torrent")){
+      try {
+        torrent = open(input);
+        pieceSize = torrent.info["piece length"];
+        startDownload();
+      } catch (err) {
+        showErrorAndExit(
+          "Could not open torrent file. Please check the file path and try again."
+        );
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        process.exit(1);
+      }
+  }else if (input.startsWith('magnet:')) {
+    log('Processing magnet link:', input.substring(0, 100) + (input.length > 100 ? '...' : ''));
+    handleMagnet(input, peerMap);
   }
 };
 
-let peers = [];
 function startDownload() {
-  getPeers(torrent, (callback) => {
+  getPeers(torrent, peerMap, (callback) => {
     updateStatus("Connecting with peers...");
     let fileName = new Buffer.from(torrent.info.name).toString("utf-8");
     outputPath = path.join(downloadsDir, fileName);

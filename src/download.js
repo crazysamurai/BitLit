@@ -114,7 +114,6 @@ const download = (peer, torrent, pieces, file, peers, filePath) => {
     updatePeerInfo(peer.ip, peer.port, "Disconnected", 0);
   });
   socket.on("error", (err) => {
-    // log(`Socket error: ${err}`);
     activeSockets = activeSockets.filter((s) => s !== socket);
     updatePeerInfo(peer.ip, peer.port, "Socket Error", 0);
   });
@@ -424,7 +423,7 @@ function refillQueueForPeer(queue, pieces, peerBitfield, torrent) {
 function isEndgameMode(pieces) {
   const missingPieces = pieces.listMissingPieces();
   if (missingPieces.length === 0) return false;
-  if (missingPieces.length > 10) return false;
+  if (missingPieces.length > 30) return false;
   // log("endgamemode called");
   const lastPieceIndex = missingPieces[missingPieces.length - 1];
   if (lastPieceIndex === undefined) return false;
@@ -435,7 +434,7 @@ function isEndgameMode(pieces) {
 //instead of sending block request to a peer and waiting for it's response that wheather it has the block or not, we just send the request to all the peers who have the block listed in their bitfields and take the response from the peer that answers first and ignore the rest of responses
 function endgameRequest(peers, pieces, queue, torrent) {
   const missingPieces = pieces.listMissingPieces();
-  if (missingPieces.length > 10) return;
+  if (missingPieces.length > 30) return;
 
   for (const pieceIndex of missingPieces) {
     // log(`Endgame mode: requesting missing blocks for piece ${pieceIndex}`);
@@ -466,4 +465,4 @@ function endgameRequest(peers, pieces, queue, torrent) {
   }
 }
 
-export { download, iteratePeers, togglePause };
+export { download, iteratePeers, togglePause, isHandShake };

@@ -4,6 +4,7 @@ import { pieceSize } from "../index.js";
 import { togglePause } from "../src/download.js";
 import { getDiskInfoSync } from "node-disk-info";
 import dns from "node:dns"
+import { log } from "../src/util.js";
 
 const state = {
   torrentName: "Unavailable",
@@ -531,9 +532,75 @@ function promptForTorrentFile() {
   });
 }
 
+function promptForMagnetLink() {
+  return new Promise((resolve) => {
+    // Hide all current screen elements
+    screen.children.forEach((child) => child.hide());
+
+    // Create a navigation box
+    const navigation = blessed.box({
+      parent: screen,
+      focusable: false,
+      width: "100%",
+      height: 3,
+      top: 2,
+      align: "center",
+      left: "center",
+      style: {
+        fg: "white",
+        bg: "black",
+      },
+      content: "Enter Magnet Link (Press Enter to confirm, Esc to cancel)",
+    });
+
+    // Create an input box
+    const inputBox = blessed.textbox({
+      parent: screen,
+      width: "80%",
+      height: 3,
+      top: "center",
+      left: "center",
+      border: "line",
+      style: {
+        fg: "white",
+        bg: "black",
+        border: { fg: "cyan" },
+      },
+      inputOnFocus: true,
+    });
+
+    // Handle Enter key
+    inputBox.key("enter", () => {
+      const magnetLink = inputBox.getValue();
+      screen.remove(inputBox);
+      screen.remove(navigation);
+      screen.children.forEach((child) => child.show());
+      screen.render();
+      resolve(magnetLink);
+    });
+
+    // Handle Escape key
+    inputBox.key("escape", () => {
+      screen.remove(inputBox);
+      screen.remove(navigation);
+      screen.children.forEach((child) => child.show());
+      screen.render();
+      resolve(null);
+    });
+
+    // Show the input box and focus it
+    inputBox.focus();
+    screen.render();
+  });
+}
+
 let onTorrentFileSelected = null;
-function setOnTorrentFileSelected(cb) {
-  onTorrentFileSelected = cb;
+function setOnTorrentFileSelected(callback) {
+  onTorrentFileSelected = callback;
+}
+let onMagnetLinkSelected = null;
+function setOnMagnetLinkSelected(callback) {
+  onMagnetLinkSelected = callback;
 }
 
 screen.key("o", async () => {
@@ -547,6 +614,14 @@ screen.key("o", async () => {
     if (file && onTorrentFileSelected) {
       onTorrentFileSelected(file);
     }
+  }
+});
+
+screen.key("m", async () => {
+  if (downloadStarted) return;
+  const magnetLink = await promptForMagnetLink();
+  if (magnetLink && onMagnetLinkSelected) {
+    onMagnetLinkSelected(magnetLink);
   }
 });
 
@@ -593,4 +668,5 @@ export {
   promptForTorrentFile,
   setOnTorrentFileSelected,
   setDownloadStarted,
+  setOnMagnetLinkSelected
 };
