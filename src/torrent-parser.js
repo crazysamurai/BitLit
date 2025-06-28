@@ -1,6 +1,7 @@
 import fs from "fs";
 import bencode from "bencode";
 import crypto from "node:crypto";
+import { log } from "./util.js";
 
 const open = (filePath) => {
   const fileData = fs.readFileSync(filePath);

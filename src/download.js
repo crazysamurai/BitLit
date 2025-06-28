@@ -34,10 +34,10 @@ let activeSockets = [];
 let isPaused = false;
 
 let lastDataTime = Date.now();
-let NETWORK_TIMEOUT = 10000
+let NETWORK_TIMEOUT = 10000;
 
 //if there's a network disruption during download
-function handleNetworkTimeout(){
+function handleNetworkTimeout() {
   setInterval(() => {
     if (Date.now() - lastDataTime > NETWORK_TIMEOUT) {
       updateDownloadSpeed(0);
@@ -88,7 +88,7 @@ const iteratePeers = (peers, torrent, path) => {
     ]),
   });
   startSpeedUpdates();
-  handleNetworkTimeout()
+  handleNetworkTimeout();
   //to avoid losing data upon resume only create these once during download
   if (!pieces) pieces = new Pieces(torrent);
   if (!queue) queue = new Queue(torrent);
@@ -97,7 +97,7 @@ const iteratePeers = (peers, torrent, path) => {
   setupEndgameTimer(peers, pieces, queue, torrent);
 
   if (!file) file = fs.openSync(path, "w");
-  fs.ftruncateSync(file, Number(size(torrent).readBigUInt64BE()));//preallocates download space
+  fs.ftruncateSync(file, Number(size(torrent).readBigUInt64BE())); //preallocates download space
   if (!torrentInfo) torrentInfo = torrent;
   if (!filePath) filePath = path;
   peers.forEach((peer) => download(peer, torrent, pieces, file, peers, path));
@@ -187,7 +187,7 @@ const onWholeMessage = (peers, socket, callback) => {
       updateDownloadSpeed(currentSpeed);
       lastSpeedUpdate = now;
     }
-    
+
     while (savedBuf.length >= 4 && savedBuf.length >= msgLen()) {
       callback(savedBuf.slice(0, msgLen()));
       savedBuf = savedBuf.slice(msgLen());

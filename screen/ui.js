@@ -216,6 +216,7 @@ function updateError(newError) {
 
 function updateTorrentName(newtorrentName) {
   state.torrentName = newtorrentName;
+  setTimer();
   updateUI();
 }
 
@@ -233,7 +234,6 @@ function updateSize(newSize) {
 
 function updatePeers(newPeers) {
   state.peers = newPeers;
-  setTimer();
   updateUI();
 }
 

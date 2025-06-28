@@ -3,6 +3,8 @@
 import { getPeers } from "./src/tracker.js";
 import { open, size } from "./src/torrent-parser.js";
 import { iteratePeers } from "./src/download.js";
+import { infoHash } from "./src/torrent-parser.js";
+import { buildDHT } from "./src/dht.js";
 import {
   updateTorrentName,
   updateError,
@@ -16,12 +18,13 @@ import dns from "node:dns";
 import { log } from "./src/util.js";
 import path from "path";
 import fs from "fs";
-import os from "os"
+import os from "os";
 
-const homeDir = os.homedir()
+const homeDir = os.homedir();
 let outputPath;
-
 let downloadsDir = path.join(homeDir, "Downloads");
+let peerMap;
+
 if (!fs.existsSync(downloadsDir)) {
   fs.mkdirSync(downloadsDir);
 }
@@ -83,7 +86,7 @@ const main = async () => {
     await new Promise((resolve) => setTimeout(resolve, 5000));
     process.exit(1);
   }
-
+  // log(`input: ${input}`);
   try {
     torrent = open(input);
     pieceSize = torrent.info["piece length"];
@@ -99,6 +102,12 @@ const main = async () => {
 
 let peers = [];
 function startDownload() {
+  peerMap = new Map();
+  //start getting peers from dht in the background
+  buildDHT(infoHash(torrent), (peer, totalPeers) => {
+    // log(`New peer found (${totalPeers} total): ${peer.host}:${peer.port}`);
+    updatePeers(peerMap.size);
+  });
   getPeers(torrent, (callback) => {
     updateStatus("Connecting with peers...");
     let fileName = new Buffer.from(torrent.info.name).toString("utf-8");
@@ -108,7 +117,7 @@ function startDownload() {
     updateSize(Number(size(torrent).readBigUInt64BE()));
     peers = callback;
     updateStatus(`{yellow-fg}Preparing to download{/yellow-fg}`);
-    updatePeers(peers.length);
+    updatePeers(peerMap.size);
     iteratePeers(peers, torrent, outputPath);
   });
 }
@@ -119,4 +128,4 @@ export default function checkInstall() {
   console.log("BitLit is installed successfully.");
 }
 
-export { torrent, pieceSize, peers, outputPath };
+export { torrent, pieceSize, peers, outputPath, peerMap };

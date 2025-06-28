@@ -9,6 +9,11 @@ A lightweight, terminal-based BitTorrent client built with Node.js. BitLit lets 
 ![Issues](https://img.shields.io/github/issues/crazysamurai/bitlit)
 ![Last Commit](https://img.shields.io/github/last-commit/crazysamurai/bitlit/development)
 
+### Update 1.1.0
+
+- DHT support was added
+- Minor bug fixes and UI improvements
+
 ### Demo
 
 A quick look at BitLit running in the terminal:
@@ -108,7 +113,7 @@ bitlit
 
 - [ ] Seeding support
 - [ ] Magnet URI support
-- [ ] DHT support
+- [ ] NAT traversal
 
 ## Contributing
 
