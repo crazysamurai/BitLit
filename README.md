@@ -2,13 +2,6 @@
 
 A lightweight, terminal-based BitTorrent client built with Node.js. BitLit lets you download torrents right from your terminal with a fast and interactive UI.
 
-[![npm version](https://img.shields.io/npm/v/bitlit)](https://www.npmjs.com/package/bitlit)
-[![Node.js Version](https://img.shields.io/node/v/bitlit)](https://www.npmjs.com/package/bitlit)
-![License](https://img.shields.io/github/license/crazysamurai/bitlit)
-![Platform](https://img.shields.io/badge/platform-terminal-lightgrey)
-![Issues](https://img.shields.io/github/issues/crazysamurai/bitlit)
-![Last Commit](https://img.shields.io/github/last-commit/crazysamurai/bitlit/development)
-
 ### Update 1.1.0
 
 - DHT support was added
